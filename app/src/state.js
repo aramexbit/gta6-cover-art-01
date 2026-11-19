@@ -1,149 +1,168 @@
-// Vice Poster Studio — poster state, sample catalogue, undo history and the
-// "Surprise me" randomiser. State is plain JSON (photos are ids into the image
-// cache), so undo is a snapshot stack and export is a pure render of state.
-
-import { GRADES, LAYOUTS, DRESSING_DEFAULT } from './poster.js';
+// state.js — Vice Poster Studio: the state model.
+// Everything the cover is made of lives here: the bundled sample photos, the
+// five poster layouts, the five sunset grades, the caption fonts and the
+// default cover (a photo hero, five panels, dressing on). No DOM, no canvas:
+// this module only describes data, so poster.js can render it and main.js
+// can edit it.
 
 export const SAMPLES = [
-  { id: 'samples/vice-portrait.jpg', label: 'Neon portrait' },
-  { id: 'samples/vice-boulevard.jpg', label: 'Sunset boulevard' },
-  { id: 'samples/vice-pier.jpg', label: 'Neon pier' },
-  { id: 'samples/vice-convertible.jpg', label: 'Sunset convertible' },
-  { id: 'samples/vice-neonstreet.jpg', label: 'Neon rain street' },
-  { id: 'samples/vice-fishing.jpg', label: 'Pier fishing' },
-  { id: 'samples/boulevard.jpg', label: 'Boulevard (kit)' },
-  { id: 'samples/pier.jpg', label: 'Pier (kit)' },
+  { id: 'convertible', src: 'samples/vice-convertible.jpg', label: 'SUNSET CONVERTIBLE', kind: 'photo' },
+  { id: 'neonstreet', src: 'samples/vice-neonstreet.jpg', label: 'NEON STREET', kind: 'photo' },
+  { id: 'fishing', src: 'samples/vice-fishing.jpg', label: 'PIER LIGHT', kind: 'photo' },
+  { id: 'portrait', src: 'samples/vice-portrait.jpg', label: 'NEON PORTRAIT', kind: 'art' },
+  { id: 'rooftop', src: 'samples/vice-rooftop.jpg', label: 'ROOFTOP DUSK', kind: 'art' },
+  { id: 'beach', src: 'samples/vice-beach.jpg', label: 'PALM GOLD', kind: 'art' },
+  { id: 'boulevard', src: 'samples/boulevard.jpg', label: 'BOULEVARD', kind: 'kit' },
+  { id: 'pier', src: 'samples/pier.jpg', label: 'PIER', kind: 'kit' },
 ];
 
-export const SIZES = [
-  { label: '1080 x 1080', w: 1080, h: 1080 },
-  { label: '1080 x 1350', w: 1080, h: 1350 },
-  { label: '1920 x 1080', w: 1920, h: 1080 },
+export const sampleById = (id) => SAMPLES.find((s) => s.id === id) || null;
+
+// Five layouts. Each entry lists its panel count and a short name for the
+// picker; the geometry itself lives in poster.js (layoutRects), so the two
+// modules stay in sync through the layout id alone.
+export const LAYOUTS = [
+  { id: 'hero2', name: 'Hero + 2', panels: 3 },
+  { id: 'hero3', name: 'Hero + 3 strip', panels: 4 },
+  { id: 'grid', name: 'Grid 2×2', panels: 4 },
+  { id: 'bleed', name: 'Full bleed + strip', panels: 3 },
+  { id: 'grid5', name: 'Neon Grid 5', panels: 5 },
 ];
 
-export const FONTS = ['Bebas Neue', 'Anton', 'Oswald'];
+export const layoutById = (id) => LAYOUTS.find((l) => l.id === id) || LAYOUTS[4];
 
-const SURPRISE_TITLES = [
-  'NEON BOULEVARD', 'SUNSET HEIST', 'PALM TREE NIGHTS', 'VICE AFTER DARK',
-  'MIDNIGHT DRIVE', 'OCEAN AVENUE', 'GOLDEN HOUR', 'NEON TIDE',
+// Five grades. A grade is a wash of colour laid over a photo: two gradient
+// stops (top, bottom), a blend mode for the wash, and a small filter shift
+// that poster.js folds into the panel's own brightness/contrast/saturation.
+export const GRADES = [
+  { id: 'sunset', name: 'Sunset', top: '#ff2e88', bottom: '#ff7a18', blend: 'overlay', lift: 0.55 },
+  { id: 'neon', name: 'Neon Nights', top: '#7b2fff', bottom: '#00e5ff', blend: 'overlay', lift: 0.6 },
+  { id: 'teal', name: 'Vice Teal', top: '#0e7c7b', bottom: '#f2a541', blend: 'soft-light', lift: 0.6 },
+  { id: 'noir', name: 'Noir', top: '#20222e', bottom: '#000000', blend: 'multiply', lift: 0.5 },
+  { id: 'gold', name: 'Palm Gold', top: '#ffb347', bottom: '#ff5e62', blend: 'soft-light', lift: 0.55 },
 ];
 
-function defaultPanel(photo, note) {
+export const gradeById = (id) => GRADES.find((g) => g.id === id) || GRADES[0];
+
+// Caption fonts, all bundled as WOFF2 under app/fonts/ under the OFL.
+export const CAPTION_FONTS = [
+  { id: 'bebas', name: 'Bebas Neue', css: '"Bebas Neue", sans-serif' },
+  { id: 'anton', name: 'Anton', css: '"Anton", sans-serif' },
+  { id: 'oswald', name: 'Oswald', css: '"Oswald", sans-serif' },
+];
+
+// The three post sizes the bounty asks for, exact pixels.
+export const EXPORT_SIZES = [
+  { id: 'square', label: '1080 × 1080', w: 1080, h: 1080 },
+  { id: 'story', label: '1080 × 1350', w: 1080, h: 1350 },
+  { id: 'wide', label: '1920 × 1080', w: 1920, h: 1080 },
+];
+
+export const PANEL_COUNT_WORDS = { 2: 'two', 3: 'three', 4: 'four', 5: 'five' };
+
+export const subtitleFor = (n) => `A sunset story in ${PANEL_COUNT_WORDS[n] || n} panels`;
+
+// One panel: which photo it shows, its mini label, how the photo sits in
+// the frame (zoom/pan/rotate/flip), its own light tweaks and its grade.
+export function defaultPanel(photoId, tag) {
   return {
-    photo, zoom: 1.2, panX: 0, panY: 0, rot: 0, flip: false,
-    bright: 1, contrast: 1.05, sat: 1.15, note: note || '',
+    photo: photoId,
+    tag: tag || '',
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    rotate: 0,
+    flip: false,
+    brightness: 1,
+    contrast: 1,
+    saturation: 1,
+    grade: 'sunset',
   };
 }
 
-/** The poster's starting state: a finished cover on first open, never empty. */
+// The cover the app opens with: Neon Grid 5, a photographic hero (the
+// convertible at sunset), four small panels, dressing on. Nothing is empty:
+// the first screenshot already shows a finished cover.
 export function defaultState() {
   return {
     layout: 'grid5',
-    grade: 'sunset',
-    fx: { duotone: false, halftone: true, grain: true, vignette: true },
     title: 'NEON BOULEVARD',
-    subtitle: subtitleForPanels(5),
-    font: 'Bebas Neue',
-    titleSize: 118,
-    titleColor: '#ffffff',
-    outline: 6,
-    spacing: 4,
-    captionPos: 'bottom',
-    size: '1080x1080',
-    dressing: { ...DRESSING_DEFAULT },
+    subtitle: subtitleFor(5),
+    subtitleAuto: true,
+    captionFont: 'bebas',
+    captionSize: 1,
+    captionColor: '#ffffff',
+    captionOutline: true,
+    captionSpacing: 0.06,
+    captionPosition: 'bottom',
     panels: [
-      defaultPanel('samples/vice-convertible.jpg', ''),
-      defaultPanel('samples/vice-boulevard.jpg', 'OCEAN DRIVE'),
-      defaultPanel('samples/vice-pier.jpg', 'NIGHT PIER'),
-      defaultPanel('samples/vice-portrait.jpg', 'NEON PORTRAIT'),
-      defaultPanel('samples/vice-neonstreet.jpg', 'NEON RAIN'),
+      defaultPanel('convertible', 'SUNSET CHASE'),
+      defaultPanel('neonstreet', 'NEON NIGHTS'),
+      defaultPanel('portrait', 'NEON PORTRAIT'),
+      defaultPanel('fishing', 'PIER LIGHT'),
+      defaultPanel('beach', 'PALM GOLD'),
     ],
+    effects: { duotone: false, halftone: false, grain: true, vignette: true },
+    dressing: {
+      show: true,
+      rating: '4.5',
+      script: 'neon harbor nights',
+      ribbon: 'SAME TROUBLE',
+      sticker: 'EST. 2026',
+      location: 'SOLMAR BAY',
+      skyline: true,
+    },
+    exportSize: 'square',
+    selected: 0,
   };
 }
 
-/** Panel-count word for the automatic subtitle: 3 -> 'three', 4 -> 'four', ... */
-export function panelCountWord(n) {
-  return { 3: 'three', 4: 'four', 5: 'five' }[n] || String(n);
-}
-
-/** The automatic subtitle for a given panel count. */
-export function subtitleForPanels(n) {
-  return `A sunset story in ${panelCountWord(n)} panels`;
-}
-
-/** True when the subtitle is still the automatic one (safe to regenerate). */
-export function isAutoSubtitle(sub) {
-  return /^a sunset story in (three|four|five|\d+) panels$/i.test((sub || '').trim());
-}
-
-/** Keeps the panel list in step when the layout changes panel count. */
-export function panelsForLayout(state, layout) {
-  const want = LAYOUTS[layout].panels;
-  const photos = ['samples/vice-convertible.jpg', 'samples/vice-boulevard.jpg', 'samples/vice-pier.jpg', 'samples/vice-portrait.jpg', 'samples/vice-neonstreet.jpg', 'samples/vice-fishing.jpg', 'samples/boulevard.jpg', 'samples/pier.jpg'];
-  const notes = ['', 'OCEAN DRIVE', 'NIGHT PIER', 'NEON PORTRAIT', 'NEON RAIN', 'PIER LIFE', 'PALM ROW', 'OLD PIER'];
-  const panels = state.panels.slice(0, want);
-  while (panels.length < want) {
-    panels.push(defaultPanel(photos[panels.length % photos.length], notes[panels.length % notes.length]));
+// Keep the panel list in step with the layout: switching layouts keeps the
+// photos that still fit and fills new panels from the samples in order.
+export function fitPanelsToLayout(state) {
+  const want = layoutById(state.layout).panels;
+  const photos = ['convertible', 'neonstreet', 'portrait', 'fishing', 'beach', 'rooftop', 'boulevard', 'pier'];
+  const tags = ['SUNSET CHASE', 'NEON NIGHTS', 'NEON PORTRAIT', 'PIER LIGHT', 'PALM GOLD', 'ROOFTOP DUSK', 'BOULEVARD', 'PIER'];
+  while (state.panels.length < want) {
+    const i = state.panels.length;
+    state.panels.push(defaultPanel(photos[i % photos.length], tags[i % tags.length]));
   }
-  return panels;
+  state.panels.length = want;
+  if (state.selected >= want) state.selected = 0;
+  if (state.subtitleAuto) state.subtitle = subtitleFor(want);
 }
 
-/** A JSON snapshot of the state (for undo), with photos as ids only. */
-export function snapshot(state) {
-  return JSON.stringify(state);
+export function cloneState(state) {
+  return JSON.parse(JSON.stringify(state));
 }
 
-export function restore(stateJson) {
-  return JSON.parse(stateJson);
-}
-
-/** Bounded undo history of state snapshots. */
-export function createHistory(limit = 40) {
-  const stack = [];
-  return {
-    push(state) {
-      const s = snapshot(state);
-      if (stack[stack.length - 1] !== s) stack.push(s);
-      while (stack.length > limit) stack.shift();
-    },
-    undo(current) {
-      if (stack.length < 2) return null;
-      stack.pop(); // drop the current state
-      return restore(stack[stack.length - 1]);
-    },
-    get depth() { return stack.length; },
-  };
-}
-
-function pick(rnd, arr) {
-  return arr[Math.floor(rnd() * arr.length)];
-}
-
-/** Random layout + grade + lettering, keeping the photos: one-click variety. */
-export function surpriseState(state) {
-  const rnd = Math.random;
-  const next = JSON.parse(JSON.stringify(state));
-  next.layout = pick(rnd, Object.keys(LAYOUTS));
-  next.panels = panelsForLayout(next, next.layout);
-  next.grade = pick(rnd, Object.keys(GRADES));
-  next.font = pick(rnd, FONTS);
-  next.title = pick(rnd, SURPRISE_TITLES);
-  next.titleSize = 96 + Math.floor(rnd() * 70);
-  next.titleColor = pick(rnd, ['#ffffff', '#ffe08a', '#2de2c5', '#ffb3d9']);
-  next.captionPos = pick(rnd, ['bottom', 'bottom', 'top', 'overlay']);
-  next.fx = {
-    duotone: rnd() < 0.3,
-    halftone: rnd() < 0.7,
-    grain: rnd() < 0.7,
-    vignette: true,
-  };
-  // Shuffle which sample sits in the hero panel.
-  const heroPhoto = pick(rnd, SAMPLES.map((s) => s.id));
-  next.panels[0].photo = heroPhoto;
-  next.panels[0].zoom = 1.1 + rnd() * 0.5;
-  // Keep the dressing (badge, script, ribbon, sticker, skyline) on: it is
-  // part of the cover look now. Regenerate the subtitle if it was automatic.
-  if (!next.dressing) next.dressing = { ...DRESSING_DEFAULT };
-  if (isAutoSubtitle(next.subtitle)) next.subtitle = subtitleForPanels(LAYOUTS[next.layout].panels);
-  return next;
+// A fresh cover out of thin air: random layout, grade, font, photos and an
+// invented title, used by "Surprise me". Dressing stays on — it is the
+// cover's signature.
+export function surpriseState() {
+  const state = defaultState();
+  const layouts = ['hero2', 'hero3', 'grid', 'bleed', 'grid5'];
+  const titles = ['NEON BOULEVARD', 'MIDNIGHT DRIVE', 'SUNSET CHASE', 'PALM GOLD', 'VICE HEAT', 'GOLDEN HOUR'];
+  const grades = GRADES.map((g) => g.id);
+  const fonts = CAPTION_FONTS.map((f) => f.id);
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  state.layout = pick(layouts);
+  fitPanelsToLayout(state);
+  state.title = pick(titles);
+  state.captionFont = pick(fonts);
+  const shuffled = [...SAMPLES].sort(() => Math.random() - 0.5);
+  state.panels.forEach((p, i) => {
+    p.photo = shuffled[i % shuffled.length].id;
+    p.tag = shuffled[i % shuffled.length].label;
+    p.grade = pick(grades);
+    p.zoom = 1 + Math.random() * 0.25;
+  });
+  state.effects.halftone = Math.random() < 0.5;
+  state.effects.duotone = Math.random() < 0.3;
+  // Vary the caption size and the script line too, so two surprises never
+  // look like the same poster with different photos.
+  state.captionSize = 0.9 + Math.random() * 0.25;
+  const scripts = ['neon harbor nights', 'same trouble, new city', 'chasing the golden hour', 'vice after dark'];
+  state.dressing.script = pick(scripts);
+  return state;
 }

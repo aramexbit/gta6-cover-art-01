@@ -1,518 +1,553 @@
-// Vice Poster Studio — wires the page: photo cache, controls, panel dragging,
-// export and the ?shot= scenes (./shots.js). No network request is ever made:
-// samples and fonts are files under app/, uploads are read locally.
+// main.js — Vice Poster Studio: boot and editor.
+// Wires the studio together: loads the bundled samples, renders the live
+// preview from the state, builds the editor controls, and handles photos
+// (pick a sample, upload your own, drag to pan, scroll to zoom), the
+// caption, the dressing, undo, "Surprise me", shortcuts and the PNG export.
+// In shot mode (?shot=cover or ?shot=editor) it renders one scene and
+// raises window.__shotReady for the screenshot runner.
 
-import { drawPoster, renderExport, GRADES, LAYOUTS, layoutRects, DRESSING_DEFAULT } from './poster.js';
-import { SAMPLES, SIZES, defaultState, panelsForLayout, createHistory, surpriseState, subtitleForPanels, isAutoSubtitle } from './state.js';
-import { runShot } from './shots.js';
+import {
+  SAMPLES, LAYOUTS, GRADES, CAPTION_FONTS, EXPORT_SIZES,
+  defaultState, cloneState, fitPanelsToLayout, surpriseState, subtitleFor,
+} from './state.js';
+import { renderCover, layoutRects, loadImage, exportPNG, verifyExport } from './poster.js';
+import { parseShotParams, applyShot } from './shots.js';
 
 const $ = (id) => document.getElementById(id);
 const stage = $('stage');
-const ctx = stage.getContext('2d');
+const sctx = stage.getContext('2d');
 
+// ---- state + history -------------------------------------------------------
 let state = defaultState();
-let selected = 0;
-let uploads = []; // { id, label, url } — object URLs of the user's own photos
-const images = new Map(); // photo id -> loaded HTMLImageElement
-const history = createHistory();
-let toastTimer = 0;
+let history = [];
+let uploadCount = 0;
+const images = new Map(); // photo id -> HTMLImageElement
+const uploadUrls = new Map(); // upload id -> object URL
 
-function loadImage(url) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = url;
-  });
+function pushHistory() {
+  history.push(JSON.stringify(state));
+  if (history.length > 40) history.shift();
+}
+function undo() {
+  if (!history.length) return showToast('Nothing to undo');
+  state = JSON.parse(history.pop());
+  syncControls();
+  render();
+  showToast('Undone');
 }
 
-async function ensureImage(id) {
-  if (!images.has(id)) images.set(id, await loadImage(id));
-  return images.get(id);
+// ---- toasts ----------------------------------------------------------------
+let toastTimer = null;
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-async function preloadAll() {
-  const ids = new Set([...SAMPLES.map((s) => s.id), ...state.panels.map((p) => p.photo)]);
-  await Promise.all([...ids].map((id) => ensureImage(id).catch(() => null)));
-  await document.fonts.ready;
+// ---- preview ---------------------------------------------------------------
+function previewSize() {
+  const size = EXPORT_SIZES.find((s) => s.id === state.exportSize) || EXPORT_SIZES[0];
+  // In an editor screenshot the whole cover must fit the viewport, so the
+  // preview shrinks; in normal use and cover shots it stays large.
+  const max = document.body.classList.contains('shot-editor') ? 480 : 720;
+  const scale = Math.min(max / size.w, max / size.h);
+  return { w: Math.round(size.w * scale), h: Math.round(size.h * scale) };
 }
 
-function sizeOf() {
-  return SIZES.find((s) => `${s.w}x${s.h}` === state.size) || SIZES[0];
-}
-
-function redraw() {
-  const { w, h } = sizeOf();
+function render() {
+  const { w, h } = previewSize();
   if (stage.width !== w || stage.height !== h) {
     stage.width = w;
     stage.height = h;
   }
-  drawPoster(ctx, state, images, w, h);
-  drawThumbs();
+  renderCover(sctx, state, w, h, images);
+  renderThumbs();
+  $('sizeLabel').textContent = `Preview — ${EXPORT_SIZES.find((s) => s.id === state.exportSize).label}`;
 }
 
-function toast(msg) {
-  const el = $('toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
-}
-
-function commit() {
-  history.push(state);
-  redraw();
-}
-
-/* ---------- panel thumbnails ---------- */
-
-function drawThumbs() {
-  const wrap = $('panelThumbs');
-  const { w, h } = sizeOf();
-  const rects = layoutRects(state.layout, w, h);
+function renderThumbs() {
+  const wrap = $('thumbs');
   wrap.innerHTML = '';
-  rects.forEach((rect, i) => {
+  state.panels.forEach((panel, i) => {
+    const img = images.get(panel.photo);
+    const d = document.createElement('button');
+    d.className = 'thumb' + (i === state.selected ? ' selected' : '');
+    d.type = 'button';
+    d.title = `Panel ${i + 1} — ${panel.tag || 'photo'}`;
+    if (img) {
+      const im = document.createElement('img');
+      im.src = img.src;
+      im.alt = panel.tag || `Panel ${i + 1}`;
+      d.appendChild(im);
+    }
+    const lab = document.createElement('span');
+    lab.textContent = `${i + 1} · ${panel.tag || 'PHOTO'}`;
+    d.appendChild(lab);
+    d.addEventListener('click', () => {
+      state.selected = i;
+      syncPanelControls();
+      render();
+    });
+    wrap.appendChild(d);
+  });
+  $('panelLabel').textContent = `Selected panel ${state.selected + 1} of ${state.panels.length}`;
+}
+
+// ---- control builders ------------------------------------------------------
+function buildButtons(container, items, activeId, onPick) {
+  const wrap = $(container);
+  wrap.innerHTML = '';
+  items.forEach((item) => {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = i === selected ? 'active' : '';
-    b.title = `Panel ${i + 1}${i === 0 ? ' (hero)' : ''}`;
-    b.setAttribute('aria-label', `Select panel ${i + 1}`);
-    const c = document.createElement('canvas');
-    c.width = 148;
-    c.height = 112;
-    const cctx = c.getContext('2d');
-    cctx.fillStyle = '#160b24';
-    cctx.fillRect(0, 0, 148, 112);
-    const img = state.panels[i] ? images.get(state.panels[i].photo) : null;
-    if (img) {
-      const s = Math.max(148 / img.naturalWidth, 112 / img.naturalHeight);
-      cctx.drawImage(img, (148 - img.naturalWidth * s) / 2, (112 - img.naturalHeight * s) / 2, img.naturalWidth * s, img.naturalHeight * s);
-    }
-    b.appendChild(c);
-    b.addEventListener('click', () => { selected = i; syncPanelControls(); redraw(); });
+    b.className = 'chip' + (item.id === activeId ? ' active' : '');
+    b.textContent = item.name || item.label;
+    b.addEventListener('click', () => onPick(item.id));
     wrap.appendChild(b);
   });
 }
 
-/* ---------- control panels ---------- */
-
 function buildSamples() {
-  const wrap = $('samples');
+  const wrap = $('sampleRow');
   wrap.innerHTML = '';
   SAMPLES.forEach((s) => {
-    const img = document.createElement('img');
-    img.src = s.id;
-    img.alt = s.label;
-    img.title = s.label;
-    img.setAttribute('role', 'option');
-    img.addEventListener('click', async () => {
-      await ensureImage(s.id);
-      state.panels[selected].photo = s.id;
-      state.panels[selected].zoom = 1.2;
-      state.panels[selected].panX = 0;
-      state.panels[selected].panY = 0;
-      commit();
-      toast(`${s.label} in panel ${selected + 1}`);
-    });
-    wrap.appendChild(img);
-  });
-}
-
-function buildLayouts() {
-  const wrap = $('layouts');
-  wrap.innerHTML = '';
-  Object.entries(LAYOUTS).forEach(([key, def]) => {
     const b = document.createElement('button');
     b.type = 'button';
-    b.textContent = def.name;
-    b.setAttribute('aria-checked', String(state.layout === key));
+    b.className = 'sample';
+    b.title = `${s.label} (${s.kind})`;
+    const im = document.createElement('img');
+    im.src = s.src;
+    im.alt = s.label;
+    b.appendChild(im);
+    const lab = document.createElement('span');
+    lab.textContent = s.label;
+    b.appendChild(lab);
     b.addEventListener('click', () => {
-      state.layout = key;
-      state.panels = panelsForLayout(state, key);
-      if (isAutoSubtitle(state.subtitle)) state.subtitle = subtitleForPanels(LAYOUTS[key].panels);
-      selected = 0;
-      syncLayoutButtons();
+      pushHistory();
+      const p = state.panels[state.selected];
+      p.photo = s.id;
+      p.tag = s.label;
       syncPanelControls();
-      syncCaptionControls();
-      commit();
+      render();
     });
     wrap.appendChild(b);
   });
 }
 
 function syncLayoutButtons() {
-  [...$('layouts').children].forEach((b, i) => {
-    b.setAttribute('aria-checked', String(Object.keys(LAYOUTS)[i] === state.layout));
-  });
-}
-
-function buildGrades() {
-  const wrap = $('grades');
-  wrap.innerHTML = '';
-  Object.entries(GRADES).forEach(([key, def]) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.dataset.grade = key;
-    b.title = def.name;
-    b.textContent = def.name;
-    b.setAttribute('aria-checked', String(state.grade === key));
-    b.addEventListener('click', () => {
-      state.grade = key;
-      syncGradeButtons();
-      commit();
-    });
-    wrap.appendChild(b);
+  buildButtons('layoutRow', LAYOUTS, state.layout, (id) => {
+    if (id === state.layout) return;
+    pushHistory();
+    state.layout = id;
+    fitPanelsToLayout(state);
+    syncControls();
+    render();
   });
 }
 
 function syncGradeButtons() {
-  [...$('grades').children].forEach((b) => {
-    b.setAttribute('aria-checked', String(b.dataset.grade === state.grade));
+  buildButtons('gradeRow', GRADES, state.panels[state.selected].grade, (id) => {
+    pushHistory();
+    state.panels[state.selected].grade = id;
+    syncGradeButtons();
+    render();
   });
 }
 
-function syncPanelPhotoOptions() {
-  const sel = $('panelPhoto');
-  sel.innerHTML = '';
-  [...SAMPLES, ...uploads].forEach((s) => {
-    const o = document.createElement('option');
-    o.value = s.id;
-    o.textContent = s.label;
-    sel.appendChild(o);
+function syncFontButtons() {
+  buildButtons('fontRow', CAPTION_FONTS, state.captionFont, (id) => {
+    pushHistory();
+    state.captionFont = id;
+    syncFontButtons();
+    render();
   });
-  sel.value = state.panels[selected].photo;
+}
+
+function syncExportButtons() {
+  buildButtons('exportRow', EXPORT_SIZES, state.exportSize, (id) => {
+    state.exportSize = id;
+    syncExportButtons();
+    render();
+  });
 }
 
 function syncPanelControls() {
-  const p = state.panels[selected];
-  if (!p) return;
-  syncPanelPhotoOptions();
-  $('zoom').value = p.zoom;
-  $('panX').value = p.panX;
-  $('panY').value = p.panY;
-  $('rot').value = p.rot;
-  $('bright').value = p.bright;
-  $('contrast').value = p.contrast;
-  $('sat').value = p.sat;
-  $('panelNote').value = p.note || '';
+  const p = state.panels[state.selected];
+  $('panelPhoto').value = p.photo;
+  $('panelTag').value = p.tag;
+  $('zoomRange').value = p.zoom;
+  $('panXRange').value = p.panX;
+  $('panYRange').value = p.panY;
+  $('rotRange').value = p.rotate;
+  $('flipCheck').checked = p.flip;
+  $('brightRange').value = p.brightness;
+  $('contrastRange').value = p.contrast;
+  $('satRange').value = p.saturation;
+  $('panelGrade').value = p.grade;
+  syncGradeButtons();
   $('zoomVal').textContent = `${Math.round(p.zoom * 100)}%`;
-  $('panXVal').textContent = p.panX.toFixed(2);
-  $('panYVal').textContent = p.panY.toFixed(2);
-  $('rotVal').textContent = `${p.rot}°`;
+  $('rotVal').textContent = `${p.rotate}°`;
+  $('brightVal').textContent = p.brightness.toFixed(2);
+  $('contrastVal').textContent = p.contrast.toFixed(2);
+  $('satVal').textContent = p.saturation.toFixed(2);
 }
 
 function syncCaptionControls() {
-  $('title').value = state.title;
-  $('subtitle').value = state.subtitle;
-  $('font').value = state.font;
-  $('titleSize').value = state.titleSize;
-  $('titleColor').value = state.titleColor;
-  $('outline').value = state.outline;
-  $('spacing').value = state.spacing;
-  $('captionPos').value = state.captionPos;
+  $('titleInput').value = state.title;
+  $('subtitleInput').value = state.subtitle;
+  $('captionSize').value = state.captionSize;
+  $('captionColor').value = state.captionColor;
+  $('outlineCheck').checked = state.captionOutline;
+  $('spacingRange').value = state.captionSpacing;
+  $('posSelect').value = state.captionPosition;
+  $('sizeVal').textContent = `${Math.round(state.captionSize * 100)}%`;
 }
 
 function syncDressingControls() {
-  if (!state.dressing) state.dressing = { ...DRESSING_DEFAULT };
   const d = state.dressing;
-  $('dressOn').checked = d.on !== false;
-  $('dressRating').value = d.rating || '';
-  $('dressScript').value = d.script || '';
-  $('dressRibbon').value = d.ribbon || '';
-  $('dressSticker').value = d.sticker || '';
-  $('dressLocation').value = d.location || '';
-  $('dressSkyline').checked = d.skyline !== false;
+  $('dressToggle').checked = d.show;
+  $('dressRating').value = d.rating;
+  $('dressScript').value = d.script;
+  $('dressRibbon').value = d.ribbon;
+  $('dressSticker').value = d.sticker;
+  $('dressLocation').value = d.location;
+  $('dressSkyline').checked = d.skyline;
+  $('dressingBox').classList.toggle('off', !d.show);
 }
 
-function syncAll() {
+function syncEffectControls() {
+  $('fxDuotone').checked = state.effects.duotone;
+  $('fxHalftone').checked = state.effects.halftone;
+  $('fxGrain').checked = state.effects.grain;
+  $('fxVignette').checked = state.effects.vignette;
+}
+
+function syncControls() {
   syncLayoutButtons();
-  syncGradeButtons();
+  syncFontButtons();
+  syncExportButtons();
   syncPanelControls();
   syncCaptionControls();
   syncDressingControls();
-  $('fxDuotone').checked = state.fx.duotone;
-  $('fxHalftone').checked = state.fx.halftone;
-  $('fxGrain').checked = state.fx.grain;
-  $('fxVignette').checked = state.fx.vignette;
-  [...$('sizes').children].forEach((b) => {
-    b.setAttribute('aria-checked', String(b.dataset.size === state.size));
-  });
+  syncEffectControls();
 }
 
-/* ---------- uploads ---------- */
-
-async function addUpload(file) {
-  if (!file || !file.type.startsWith('image/')) return;
-  const url = URL.createObjectURL(file);
-  const id = `upload:${Date.now()}-${uploads.length}`;
-  const img = await loadImage(url);
-  images.set(id, img);
-  uploads.push({ id, label: file.name.replace(/\.[^.]+$/, '').slice(0, 18) || 'Your photo', url });
-  const wrap = $('uploads');
-  const thumb = document.createElement('img');
-  thumb.src = url;
-  thumb.alt = file.name;
-  thumb.title = file.name;
-  thumb.addEventListener('click', () => {
-    state.panels[selected].photo = id;
-    state.panels[selected].zoom = 1.2;
-    state.panels[selected].panX = 0;
-    state.panels[selected].panY = 0;
-    commit();
-    toast('Your photo is in the poster');
+// ---- panel controls --------------------------------------------------------
+function bindPanelControls() {
+  const p = () => state.panels[state.selected];
+  const photoSel = $('panelPhoto');
+  photoSel.innerHTML = '';
+  [...SAMPLES].forEach((s) => {
+    const o = document.createElement('option');
+    o.value = s.id;
+    o.textContent = `${s.label} (${s.kind})`;
+    photoSel.appendChild(o);
   });
-  wrap.appendChild(thumb);
-  state.panels[selected].photo = id;
-  syncPanelPhotoOptions();
-  commit();
-  toast('Photo added — drag it on the poster to position it');
-}
-
-$('photoInput').addEventListener('change', async (e) => {
-  for (const f of e.target.files) await addUpload(f);
-  e.target.value = '';
-});
-$('dropzone').addEventListener('click', () => $('photoInput').click());
-$('dropzone').addEventListener('dragover', (e) => { e.preventDefault(); $('dropzone').classList.add('dragover'); });
-$('dropzone').addEventListener('dragleave', () => $('dropzone').classList.remove('dragover'));
-$('dropzone').addEventListener('drop', async (e) => {
-  e.preventDefault();
-  $('dropzone').classList.remove('dragover');
-  for (const f of e.dataTransfer.files) await addUpload(f);
-});
-
-/* ---------- panel sliders ---------- */
-
-function bindRange(id, get, set, after) {
-  $(id).addEventListener('input', (e) => {
-    set(Number(e.target.value));
+  photoSel.addEventListener('change', () => {
+    pushHistory();
+    const s = SAMPLES.find((x) => x.id === photoSel.value);
+    p().photo = photoSel.value;
+    if (s) p().tag = s.label;
     syncPanelControls();
-    redraw();
-    if (after) after();
+    render();
   });
-  $(id).addEventListener('change', () => history.push(state));
-}
-bindRange('zoom', (p) => p.zoom, (v) => { state.panels[selected].zoom = v; });
-bindRange('panX', (p) => p.panX, (v) => { state.panels[selected].panX = v; });
-bindRange('panY', (p) => p.panY, (v) => { state.panels[selected].panY = v; });
-bindRange('rot', (p) => p.rot, (v) => { state.panels[selected].rot = v; });
-bindRange('bright', (p) => p.bright, (v) => { state.panels[selected].bright = v; });
-bindRange('contrast', (p) => p.contrast, (v) => { state.panels[selected].contrast = v; });
-bindRange('sat', (p) => p.sat, (v) => { state.panels[selected].sat = v; });
-
-$('flip').addEventListener('click', () => {
-  state.panels[selected].flip = !state.panels[selected].flip;
-  commit();
-});
-$('cropCenter').addEventListener('click', () => {
-  Object.assign(state.panels[selected], { panX: 0, panY: 0, zoom: 1.2, rot: 0 });
-  syncPanelControls();
-  commit();
-});
-$('cropFace').addEventListener('click', () => {
-  Object.assign(state.panels[selected], { panY: -0.22, zoom: 1.5 });
-  syncPanelControls();
-  commit();
-});
-$('panelPhoto').addEventListener('change', async (e) => {
-  await ensureImage(e.target.value);
-  state.panels[selected].photo = e.target.value;
-  commit();
-});
-$('panelNote').addEventListener('input', (e) => {
-  state.panels[selected].note = e.target.value;
-  redraw();
-});
-$('panelNote').addEventListener('change', () => history.push(state));
-
-/* ---------- grade + effects ---------- */
-
-[['fxDuotone', 'duotone'], ['fxHalftone', 'halftone'], ['fxGrain', 'grain'], ['fxVignette', 'vignette']].forEach(([id, key]) => {
-  $(id).addEventListener('change', (e) => {
-    state.fx[key] = e.target.checked;
-    commit();
+  $('panelTag').addEventListener('change', () => {
+    pushHistory();
+    p().tag = $('panelTag').value.toUpperCase();
+    render();
   });
-});
-
-/* ---------- caption ---------- */
-
-$('title').addEventListener('input', (e) => { state.title = e.target.value; redraw(); });
-$('title').addEventListener('change', () => history.push(state));
-$('subtitle').addEventListener('input', (e) => { state.subtitle = e.target.value; redraw(); });
-$('subtitle').addEventListener('change', () => history.push(state));
-$('font').addEventListener('change', async (e) => {
-  state.font = e.target.value;
-  await document.fonts.load(`400 100px "${state.font}"`);
-  commit();
-});
-$('titleSize').addEventListener('input', (e) => { state.titleSize = Number(e.target.value); redraw(); });
-$('titleSize').addEventListener('change', () => history.push(state));
-$('titleColor').addEventListener('input', (e) => { state.titleColor = e.target.value; redraw(); });
-$('titleColor').addEventListener('change', () => history.push(state));
-$('outline').addEventListener('input', (e) => { state.outline = Number(e.target.value); redraw(); });
-$('outline').addEventListener('change', () => history.push(state));
-$('spacing').addEventListener('input', (e) => { state.spacing = Number(e.target.value); redraw(); });
-$('spacing').addEventListener('change', () => history.push(state));
-$('captionPos').addEventListener('change', (e) => { state.captionPos = e.target.value; commit(); });
-
-/* ---------- dressing ---------- */
-
-$('dressOn').addEventListener('change', (e) => {
-  state.dressing.on = e.target.checked;
-  commit();
-});
-$('dressSkyline').addEventListener('change', (e) => {
-  state.dressing.skyline = e.target.checked;
-  commit();
-});
-[['dressRating', 'rating'], ['dressScript', 'script'], ['dressRibbon', 'ribbon'], ['dressSticker', 'sticker'], ['dressLocation', 'location']].forEach(([id, key]) => {
-  $(id).addEventListener('input', (e) => {
-    state.dressing[key] = e.target.value;
-    redraw();
+  const live = (id, fn) => {
+    $(id).addEventListener('input', () => { fn(parseFloat($(id).value)); render(); });
+    $(id).addEventListener('change', () => { pushHistory(); syncPanelControls(); });
+  };
+  live('zoomRange', (v) => { p().zoom = v; $('zoomVal').textContent = `${Math.round(v * 100)}%`; });
+  live('panXRange', (v) => { p().panX = v; });
+  live('panYRange', (v) => { p().panY = v; });
+  live('rotRange', (v) => { p().rotate = v; $('rotVal').textContent = `${v}°`; });
+  live('brightRange', (v) => { p().brightness = v; $('brightVal').textContent = v.toFixed(2); });
+  live('contrastRange', (v) => { p().contrast = v; $('contrastVal').textContent = v.toFixed(2); });
+  live('satRange', (v) => { p().saturation = v; $('satVal').textContent = v.toFixed(2); });
+  $('flipCheck').addEventListener('change', () => {
+    pushHistory();
+    p().flip = $('flipCheck').checked;
+    render();
   });
-  $(id).addEventListener('change', () => history.push(state));
-});
-
-/* ---------- sizes + export ---------- */
-
-[...$('sizes').children].forEach((b) => {
-  b.addEventListener('click', () => {
-    state.size = b.dataset.size;
-    syncAll();
-    redraw();
+  const gradeSel = $('panelGrade');
+  gradeSel.innerHTML = '';
+  GRADES.forEach((g) => {
+    const o = document.createElement('option');
+    o.value = g.id;
+    o.textContent = g.name;
+    gradeSel.appendChild(o);
   });
-});
-
-function download(canvas, name) {
-  canvas.toBlob((blob) => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  }, 'image/png');
+  gradeSel.addEventListener('change', () => {
+    pushHistory();
+    p().grade = gradeSel.value;
+    syncGradeButtons();
+    render();
+  });
+  $('gradeAllBtn').addEventListener('click', () => {
+    pushHistory();
+    state.panels.forEach((panel) => { panel.grade = p().grade; });
+    render();
+    showToast(`Grade ${p().grade} applied to all panels`);
+  });
 }
 
-function exportOne(size, silent) {
-  const t0 = performance.now();
-  const canvas = renderExport(state, images, size.w, size.h);
-  download(canvas, `vice-poster-${size.w}x${size.h}.png`);
-  const ms = Math.round(performance.now() - t0);
-  $('status').textContent = `Saved vice-poster-${size.w}x${size.h}.png in ${ms} ms`;
-  if (!silent) toast(`Exported ${size.w} x ${size.h} PNG in ${ms} ms`);
+// ---- caption + dressing + effects ------------------------------------------
+function bindCaptionControls() {
+  $('titleInput').addEventListener('input', () => {
+    state.title = $('titleInput').value.toUpperCase();
+    render();
+  });
+  $('titleInput').addEventListener('change', pushHistory);
+  $('subtitleInput').addEventListener('input', () => {
+    state.subtitle = $('subtitleInput').value;
+    state.subtitleAuto = false;
+    render();
+  });
+  $('subtitleInput').addEventListener('change', pushHistory);
+  $('captionSize').addEventListener('input', () => {
+    state.captionSize = parseFloat($('captionSize').value);
+    $('sizeVal').textContent = `${Math.round(state.captionSize * 100)}%`;
+    render();
+  });
+  $('captionSize').addEventListener('change', pushHistory);
+  $('captionColor').addEventListener('input', () => {
+    state.captionColor = $('captionColor').value;
+    render();
+  });
+  $('captionColor').addEventListener('change', pushHistory);
+  $('outlineCheck').addEventListener('change', () => {
+    pushHistory();
+    state.captionOutline = $('outlineCheck').checked;
+    render();
+  });
+  $('spacingRange').addEventListener('input', () => {
+    state.captionSpacing = parseFloat($('spacingRange').value);
+    render();
+  });
+  $('spacingRange').addEventListener('change', pushHistory);
+  $('posSelect').addEventListener('change', () => {
+    pushHistory();
+    state.captionPosition = $('posSelect').value;
+    render();
+  });
 }
 
-$('export').addEventListener('click', () => exportOne(sizeOf(), false));
-$('exportAll').addEventListener('click', () => {
-  SIZES.forEach((s, i) => setTimeout(() => exportOne(s, i < SIZES.length - 1), i * 250));
-  toast('Exporting all three sizes…');
-});
+function bindDressingControls() {
+  const d = () => state.dressing;
+  $('dressToggle').addEventListener('change', () => {
+    pushHistory();
+    d().show = $('dressToggle').checked;
+    syncDressingControls();
+    render();
+  });
+  const text = (id, key) => {
+    $(id).addEventListener('input', () => { d()[key] = $(id).value; render(); });
+    $(id).addEventListener('change', pushHistory);
+  };
+  text('dressRating', 'rating');
+  text('dressScript', 'script');
+  text('dressRibbon', 'ribbon');
+  text('dressSticker', 'sticker');
+  text('dressLocation', 'location');
+  $('dressSkyline').addEventListener('change', () => {
+    pushHistory();
+    d().skyline = $('dressSkyline').checked;
+    render();
+  });
+}
 
-/* ---------- surprise + undo ---------- */
+function bindEffectControls() {
+  const map = [['fxDuotone', 'duotone'], ['fxHalftone', 'halftone'], ['fxGrain', 'grain'], ['fxVignette', 'vignette']];
+  map.forEach(([id, key]) => {
+    $(id).addEventListener('change', () => {
+      pushHistory();
+      state.effects[key] = $(id).checked;
+      render();
+    });
+  });
+}
 
-$('surprise').addEventListener('click', async () => {
-  state = surpriseState(state);
-  selected = 0;
-  await preloadAll();
-  syncAll();
-  commit();
-  toast(`Surprise! ${state.layout} layout, ${GRADES[state.grade].name} grade`);
-});
-$('undo').addEventListener('click', () => {
-  const prev = history.undo(state);
-  if (prev) {
-    state = prev;
-    selected = 0;
-    syncAll();
-    redraw();
-    toast('Undone');
-  } else {
-    toast('Nothing to undo yet');
+// ---- uploads ---------------------------------------------------------------
+function addUpload(file) {
+  if (!file || !file.type.startsWith('image/')) return showToast('Pick an image file');
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const id = `up-${++uploadCount}`;
+    uploadUrls.set(id, reader.result);
+    try {
+      const img = await loadImage(reader.result);
+      images.set(id, img);
+      pushHistory();
+      const p = state.panels[state.selected];
+      p.photo = id;
+      p.tag = file.name.replace(/\.[^.]+$/, '').toUpperCase().slice(0, 18) || 'UPLOAD';
+      const sel = $('panelPhoto');
+      const o = document.createElement('option');
+      o.value = id;
+      o.textContent = `${p.tag} (upload)`;
+      sel.appendChild(o);
+      syncPanelControls();
+      render();
+      showToast(`Loaded ${file.name}`);
+    } catch {
+      showToast('Could not read that image');
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+// ---- export ----------------------------------------------------------------
+function downloadBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+}
+
+async function exportCurrent() {
+  const size = EXPORT_SIZES.find((s) => s.id === state.exportSize);
+  try {
+    const blob = await exportPNG(state, images, size.w, size.h);
+    downloadBlob(blob, `vice-poster-${size.w}x${size.h}.png`);
+    showToast(`Exported PNG ${size.label}`);
+  } catch {
+    showToast('Export failed — try again');
   }
-});
-
-/* ---------- drag to pan, wheel to zoom, click to select ---------- */
-
-function eventPanel(e) {
-  const r = stage.getBoundingClientRect();
-  const px = ((e.clientX - r.left) / r.width) * stage.width;
-  const py = ((e.clientY - r.top) / r.height) * stage.height;
-  const rects = layoutRects(state.layout, stage.width, stage.height);
-  const i = rects.findIndex((rc) => px >= rc.x && px <= rc.x + rc.w && py >= rc.y && py <= rc.y + rc.h);
-  return { i, px, py };
 }
 
-let drag = null;
-stage.addEventListener('pointerdown', (e) => {
-  const { i, px, py } = eventPanel(e);
-  if (i < 0) return;
-  selected = i;
-  syncPanelControls();
-  redraw();
-  const p = state.panels[i];
-  drag = { x: px, y: py, panX: p.panX, panY: p.panY };
-  stage.setPointerCapture(e.pointerId);
-});
-stage.addEventListener('pointermove', (e) => {
-  if (!drag) return;
-  const r = stage.getBoundingClientRect();
-  const px = ((e.clientX - r.left) / r.width) * stage.width;
-  const py = ((e.clientY - r.top) / r.height) * stage.height;
-  const rects = layoutRects(state.layout, stage.width, stage.height);
-  const rc = rects[selected];
-  const p = state.panels[selected];
-  p.panX = Math.max(-0.5, Math.min(0.5, drag.panX + (px - drag.x) / rc.w));
-  p.panY = Math.max(-0.5, Math.min(0.5, drag.panY + (py - drag.y) / rc.h));
-  syncPanelControls();
-  redraw();
-});
-stage.addEventListener('pointerup', () => {
-  if (drag) { history.push(state); drag = null; }
-});
-stage.addEventListener('wheel', (e) => {
-  e.preventDefault();
-  const p = state.panels[selected];
-  p.zoom = Math.max(1, Math.min(3, p.zoom * (e.deltaY < 0 ? 1.08 : 0.93)));
-  syncPanelControls();
-  redraw();
-}, { passive: false });
-
-/* ---------- keyboard shortcuts ---------- */
-
-document.addEventListener('keydown', (e) => {
-  if (e.target.matches('input[type="text"], select, textarea')) return;
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); $('undo').click(); }
-  else if (e.key.toLowerCase() === 'e') { exportOne(sizeOf(), false); }
-  else if (e.key.toLowerCase() === 's') { $('surprise').click(); }
-  else if (['1', '2', '3', '4', '5'].includes(e.key)) {
-    const key = Object.keys(LAYOUTS)[Number(e.key) - 1];
-    if (key) [...$('layouts').children][Number(e.key) - 1].click();
+async function exportAll() {
+  for (const size of EXPORT_SIZES) {
+    const blob = await exportPNG(state, images, size.w, size.h);
+    downloadBlob(blob, `vice-poster-${size.w}x${size.h}.png`);
   }
-});
-
-/* ---------- boot ---------- */
-
-buildSamples();
-buildLayouts();
-buildGrades();
-syncAll();
-history.push(state);
-
-const query = new URLSearchParams(location.search);
-const shot = query.get('shot');
-if (shot) {
-  // Fixed scenes for screenshots: ?shot=cover shows the cover alone,
-  // ?shot=editor shows the full studio with a sample loaded.
-  runShot(shot, query, {
-    async apply(nextState) {
-      state = nextState;
-      selected = 0;
-      await preloadAll();
-      syncAll();
-      redraw();
-    },
-    setImages(map) { for (const [k, v] of map) images.set(k, v); },
-  });
-} else {
-  preloadAll().then(redraw);
+  showToast('Exported all 3 sizes');
 }
+
+// ---- canvas pointer: pick a panel, drag to pan, scroll to zoom -------------
+function bindStagePointer() {
+  let drag = null;
+  stage.addEventListener('pointerdown', (e) => {
+    const r = stage.getBoundingClientRect();
+    const px = (e.clientX - r.left) * (stage.width / r.width);
+    const py = (e.clientY - r.top) * (stage.height / r.height);
+    const rects = layoutRects(state.layout, stage.width, stage.height);
+    const hit = rects.findIndex((rc) => px >= rc.x && px <= rc.x + rc.w && py >= rc.y && py <= rc.y + rc.h);
+    if (hit >= 0 && hit !== state.selected) {
+      state.selected = hit;
+      syncPanelControls();
+      render();
+    }
+    drag = { x: e.clientX, y: e.clientY, panX: state.panels[state.selected].panX, panY: state.panels[state.selected].panY };
+    stage.setPointerCapture(e.pointerId);
+  });
+  stage.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const r = stage.getBoundingClientRect();
+    const p = state.panels[state.selected];
+    p.panX = Math.max(-0.5, Math.min(0.5, drag.panX + (e.clientX - drag.x) / r.width));
+    p.panY = Math.max(-0.5, Math.min(0.5, drag.panY + (e.clientY - drag.y) / r.height));
+    render();
+  });
+  stage.addEventListener('pointerup', () => {
+    if (drag) { pushHistory(); syncPanelControls(); }
+    drag = null;
+  });
+  stage.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const p = state.panels[state.selected];
+    p.zoom = Math.max(1, Math.min(3, p.zoom * (1 - Math.sign(e.deltaY) * 0.08)));
+    render();
+  }, { passive: false });
+}
+
+// ---- boot ------------------------------------------------------------------
+async function boot() {
+  const params = parseShotParams(window.location.search);
+  if (params.mode === 'cover') document.body.classList.add('shot-cover');
+  if (params.mode === 'editor') document.body.classList.add('shot-editor');
+  state = applyShot(defaultState(), params);
+
+  buildSamples();
+  bindPanelControls();
+  bindCaptionControls();
+  bindDressingControls();
+  bindEffectControls();
+  bindStagePointer();
+  $('fileInput').addEventListener('change', (e) => addUpload(e.target.files[0]));
+  $('uploadBtn').addEventListener('click', () => $('fileInput').click());
+  $('stageWrap').addEventListener('dragover', (e) => e.preventDefault());
+  $('stageWrap').addEventListener('drop', (e) => {
+    e.preventDefault();
+    addUpload(e.dataTransfer.files[0]);
+  });
+  $('exportBtn').addEventListener('click', exportCurrent);
+  $('exportAllBtn').addEventListener('click', exportAll);
+  $('undoBtn').addEventListener('click', undo);
+  $('surpriseBtn').addEventListener('click', () => {
+    pushHistory();
+    const keepSize = state.exportSize;
+    state = surpriseState();
+    state.exportSize = keepSize;
+    syncControls();
+    render();
+    showToast('Surprise me — new layout, grade and photos');
+  });
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+    const layouts = ['hero2', 'hero3', 'grid', 'bleed', 'grid5'];
+    const idx = ['1', '2', '3', '4', '5'].indexOf(e.key);
+    if (idx >= 0) {
+      pushHistory();
+      state.layout = layouts[idx];
+      fitPanelsToLayout(state);
+      syncControls();
+      render();
+    } else if (e.key.toLowerCase() === 'e') {
+      exportCurrent();
+    } else if (e.key.toLowerCase() === 's') {
+      $('surpriseBtn').click();
+    }
+  });
+
+  // Load every bundled sample, then the fonts, then draw.
+  await Promise.all(SAMPLES.map(async (s) => {
+    try { images.set(s.id, await loadImage(s.src)); } catch { /* a missing sample just stays empty */ }
+  }));
+  try {
+    await Promise.all([
+      document.fonts.load('40px "Bebas Neue"'),
+      document.fonts.load('40px Anton'),
+      document.fonts.load('600 20px Oswald'),
+      document.fonts.load('40px "Great Vibes"'),
+    ]);
+    await document.fonts.ready;
+  } catch { /* canvas falls back to sans-serif */ }
+
+  syncControls();
+  render();
+  window.__shotReady = true;
+}
+
+// Test hooks for the headless checks: the runner verifies exports and reads
+// the live state without clicking anything.
+window.__vice = {
+  get state() { return state; },
+  exportPNG: (w, h) => exportPNG(state, images, w, h),
+  verifyExport: (w, h) => verifyExport(state, images, w, h),
+  render,
+};
+
+boot().catch((err) => {
+  console.error(err);
+  const t = $('toast');
+  if (t) { t.textContent = 'Could not start the studio'; t.classList.add('show'); }
+});

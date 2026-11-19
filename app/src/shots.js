@@ -1,65 +1,70 @@
-// Fixed scenes for screenshots.
-// ?shot=cover&photo=<sample>&caption=<text>&layout=<layout>&grade=<grade>&size=<WxH>
-//   shows the finished cover alone, fullscreen.
-// ?shot=editor&photo=<sample>&caption=<text>&layout=<layout>&grade=<grade>
-//   shows the full studio with a sample loaded.
-// window.__shotReady is set once the cover is painted (double rAF), so a
-// screenshot runner knows the scene is settled.
+// shots.js — Vice Poster Studio: screenshot scenes.
+// The headless runner opens the app with a query string (?shot=cover or
+// ?shot=editor, plus layout/grade/photo/caption) and this module turns it
+// into a state the app renders. Cover scenes show only the finished cover,
+// full frame; editor scenes show the whole studio with a photo loaded.
+// Nothing here touches the network: every photo is a bundled sample.
 
-import { defaultState, panelsForLayout, subtitleForPanels } from './state.js';
-import { LAYOUTS } from './poster.js';
+import { layoutById, gradeById, subtitleFor, fitPanelsToLayout, sampleById } from './state.js';
 
-const PHOTOS = {
-  portrait: 'samples/vice-portrait.jpg',
-  boulevard: 'samples/vice-boulevard.jpg',
-  pier: 'samples/vice-pier.jpg',
-  convertible: 'samples/vice-convertible.jpg',
-  neonstreet: 'samples/vice-neonstreet.jpg',
-  fishing: 'samples/vice-fishing.jpg',
-  kitboulevard: 'samples/boulevard.jpg',
-  kitpier: 'samples/pier.jpg',
-};
+export const SHOT_MODES = ['cover', 'editor'];
 
-export async function runShot(shot, query, api) {
-  const state = defaultState();
-  const photo = PHOTOS[query.get('photo')] || PHOTOS.portrait;
-  const layout = query.get('layout') || 'hero2';
-  const grade = query.get('grade') || 'sunset';
-  state.layout = layout;
-  state.grade = grade;
-  state.title = query.get('caption') || 'NEON BOULEVARD';
-  // Dynamic subtitle: explicit ?subtitle= wins, otherwise match the panel count.
-  if (query.get('subtitle') !== null) state.subtitle = query.get('subtitle');
-  else state.subtitle = subtitleForPanels((LAYOUTS[layout] || LAYOUTS.hero2).panels);
-  if (query.get('font')) state.font = query.get('font');
-  if (query.get('size')) state.size = query.get('size');
-  if (query.get('dressing') === 'off') state.dressing.on = false;
-  state.panels = panelsForLayout(state, layout);
-  // Each panel gets a different photo: the requested one first, then the
-  // other samples in turn, so no layout ever shows the same photo twice.
-  // The note travels with its photo (the cycle order differs from the
-  // default panel order, so reusing the positional notes would mislabel
-  // panels — e.g. 'OCEAN DRIVE' on the portrait). The hero keeps no note.
-  const NOTE_BY_PHOTO = {
-    'samples/vice-portrait.jpg': 'NEON PORTRAIT',
-    'samples/vice-boulevard.jpg': 'OCEAN DRIVE',
-    'samples/vice-pier.jpg': 'NIGHT PIER',
-    'samples/vice-convertible.jpg': 'GOLDEN HOUR',
-    'samples/vice-neonstreet.jpg': 'NEON RAIN',
-    'samples/vice-fishing.jpg': 'PIER LIFE',
-    'samples/boulevard.jpg': 'PALM ROW',
-    'samples/pier.jpg': 'OLD PIER',
+// Read the scene out of the URL. Unknown values fall back to the defaults,
+// so a plain visit (no query) just opens the studio.
+export function parseShotParams(search) {
+  const q = new URLSearchParams(search || '');
+  const shot = q.get('shot');
+  return {
+    mode: SHOT_MODES.includes(shot) ? shot : 'editor',
+    layout: q.get('layout') || null,
+    grade: q.get('grade') || null,
+    photo: q.get('photo') || null,
+    caption: q.get('caption') || null,
+    size: q.get('size') || null,
+    dressing: q.get('dressing') || null,
   };
-  const cycle = [photo, 'samples/vice-portrait.jpg', 'samples/vice-boulevard.jpg', 'samples/vice-pier.jpg', 'samples/vice-convertible.jpg', 'samples/vice-neonstreet.jpg', 'samples/vice-fishing.jpg', 'samples/boulevard.jpg', 'samples/pier.jpg'];
-  const heroPhotos = [...new Set(cycle)];
-  state.panels.forEach((p, i) => {
-    p.photo = heroPhotos[i % heroPhotos.length];
-    if (i > 0) p.note = NOTE_BY_PHOTO[p.photo] || '';
-    p.zoom = 1.25;
-  });
-  if (shot === 'cover') document.body.classList.add('shot-cover');
-  if (shot === 'editor') document.body.classList.add('shot-editor');
-  await api.apply(state);
-  await document.fonts.ready;
-  requestAnimationFrame(() => requestAnimationFrame(() => { window.__shotReady = true; }));
 }
+
+// Apply a scene to a fresh default state and hand it back. The hero photo
+// is the one the query names (a photographic sample for the main cover);
+// the other panels keep the defaults, and the caption becomes the title
+// the query asked for.
+export function applyShot(state, params) {
+  if (params.layout && layoutById(params.layout)) {
+    state.layout = params.layout;
+    fitPanelsToLayout(state);
+  }
+  if (params.grade && gradeById(params.grade)) {
+    state.panels.forEach((p) => { p.grade = params.grade; });
+  }
+  if (params.photo && sampleById(params.photo)) {
+    state.panels[0].photo = params.photo;
+    state.panels[0].tag = sampleById(params.photo).label;
+  }
+  if (params.caption) {
+    state.title = params.caption.toUpperCase();
+  }
+  if (params.size) state.exportSize = params.size;
+  // ?dressing=off hides the dressing for a clean cover variant.
+  if (params.dressing === 'off') {
+    state.dressing.show = false;
+    state.dressing.skyline = false;
+  }
+  // A cover scene is the cover alone: dressing on, effects on, no editor.
+  if (params.mode === 'cover') {
+    state.dressing.show = true;
+    state.dressing.skyline = true;
+    state.effects.grain = true;
+    state.effects.vignette = true;
+  }
+  return state;
+}
+
+// The four scenes the runner screenshots, in the order shots.json lists
+// them. The first is the cover: it is the entry's face on the board.
+export function shotTitle(params) {
+  if (params.mode === 'cover') return `${params.caption || 'Cover'} — exported cover`;
+  return `${params.layout || 'grid5'} — editor`;
+}
+
+export { subtitleFor };
