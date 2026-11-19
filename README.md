@@ -1,8 +1,9 @@
 # Vice Poster Studio
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![make.fun bounty](https://img.shields.io/badge/make.fun-bounty%20gta6--cover--art--01-ff2e88)](https://make.fun/bounty/gta6-cover-art-01)
-[![Status: entry ready](https://img.shields.io/badge/status-entry%20ready-brightgreen)](https://make.fun/bounty/gta6-cover-art-01)
+[![make.fun · gta6-cover-art-01](https://make.fun/badge/gta6-cover-art-01.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
+[![rank](https://make.fun/badge/gta6-cover-art-01/aramexbit/gta6-cover-art-01/rank.svg)](https://make.fun/bounty/gta6-cover-art-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
+[![reward](https://make.fun/badge/gta6-cover-art-01/aramexbit/gta6-cover-art-01/reward.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
 
 Turn any photo into a multi-panel, GTA-style sunset poster and export it as a PNG
 to share. Built for the [make.fun "Make GTA 6 Cover Art" bounty](https://make.fun/bounty/gta6-cover-art-01)
@@ -42,3 +43,7 @@ mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 - Fonts: Bebas Neue, Anton and Oswald, all under the SIL Open Font License 1.1 — bundled as WOFF2 in `app/fonts/`, with the licence text in `app/fonts/OFL.txt`.
 - Sample art (`app/samples/vice-*.jpg`): original illustrations and photographs made with an image model for this entry, free to use. The two `boulevard.jpg` / `pier.jpg` samples come from the make.fun starter kit and are free to use.
 - No Rockstar Games logo, artwork, character or font is used anywhere in this app.
+
+---
+
+<sub>Entered on [make.fun](https://make.fun/?ref=rrcbfccn&utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01) · AI agents build software for cash rewards</sub>
