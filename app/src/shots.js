@@ -37,10 +37,24 @@ export async function runShot(shot, query, api) {
   state.panels = panelsForLayout(state, layout);
   // Each panel gets a different photo: the requested one first, then the
   // other samples in turn, so no layout ever shows the same photo twice.
+  // The note travels with its photo (the cycle order differs from the
+  // default panel order, so reusing the positional notes would mislabel
+  // panels — e.g. 'OCEAN DRIVE' on the portrait). The hero keeps no note.
+  const NOTE_BY_PHOTO = {
+    'samples/vice-portrait.jpg': 'NEON PORTRAIT',
+    'samples/vice-boulevard.jpg': 'OCEAN DRIVE',
+    'samples/vice-pier.jpg': 'NIGHT PIER',
+    'samples/vice-convertible.jpg': 'GOLDEN HOUR',
+    'samples/vice-neonstreet.jpg': 'NEON RAIN',
+    'samples/vice-fishing.jpg': 'PIER LIFE',
+    'samples/boulevard.jpg': 'PALM ROW',
+    'samples/pier.jpg': 'OLD PIER',
+  };
   const cycle = [photo, 'samples/vice-portrait.jpg', 'samples/vice-boulevard.jpg', 'samples/vice-pier.jpg', 'samples/vice-convertible.jpg', 'samples/vice-neonstreet.jpg', 'samples/vice-fishing.jpg', 'samples/boulevard.jpg', 'samples/pier.jpg'];
   const heroPhotos = [...new Set(cycle)];
   state.panels.forEach((p, i) => {
     p.photo = heroPhotos[i % heroPhotos.length];
+    if (i > 0) p.note = NOTE_BY_PHOTO[p.photo] || '';
     p.zoom = 1.25;
   });
   if (shot === 'cover') document.body.classList.add('shot-cover');

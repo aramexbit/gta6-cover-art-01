@@ -204,7 +204,13 @@ export function captionMetrics(state, W, H) {
   let ty;
   if (pos === 'top') ty = pad + size;
   else if (pos === 'overlay') ty = H * 0.52;
-  else ty = H - pad - (sub ? size * 0.42 : 0);
+  else {
+    // The taller skyline strip would collide with the subtitle baseline, so
+    // lift a bottom caption by the extra skyline height (vs the old 34px).
+    const skylineOn = state.dressing?.skyline !== false && state.dressing?.on !== false;
+    const skyLift = skylineOn ? Math.max(0, Math.round(H * 0.062) - 34) : 0;
+    ty = H - pad - (sub ? size * 0.42 : 0) - skyLift;
+  }
   return { base, size, pos, pad, ty, subSize: Math.max(16, size * 0.24), sub };
 }
 
@@ -327,18 +333,24 @@ export function drawDressing(ctx, state, W, H) {
 
   // --- skyline silhouette strip along the very bottom edge ---
   if (d.skyline) {
-    const sh = Math.max(22, H * 0.032);
+    const sh = Math.max(48, H * 0.062);
     const rnd = seeded(77);
     ctx.save();
+    // Sunset glow behind the buildings so the silhouette reads at a glance.
+    const glow = ctx.createLinearGradient(0, H - sh * 2.4, 0, H);
+    glow.addColorStop(0, 'rgba(255,110,60,0)');
+    glow.addColorStop(1, 'rgba(255,110,60,0.35)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, H - sh * 2.4, W, sh * 2.4);
     let x = 0;
     while (x < W) {
       const bw = (0.03 + rnd() * 0.075) * W;
       const bh = sh * (0.45 + rnd() * 0.55);
       ctx.fillStyle = '#0b0216';
       ctx.fillRect(x, H - bh, bw, bh);
-      if (rnd() > 0.4) { // one lit window per building, sometimes
+      if (rnd() > 0.45) { // one lit window per building, more often than before
         ctx.fillStyle = 'rgba(255,201,61,0.9)';
-        ctx.fillRect(x + bw * 0.3, H - bh + sh * 0.14, Math.max(2, 3 * u), Math.max(2, 4 * u));
+        ctx.fillRect(x + bw * 0.3, H - bh + sh * 0.14, Math.max(3, 4 * u), Math.max(3, 6 * u));
       }
       x += bw + 2;
     }
@@ -419,7 +431,7 @@ export function drawDressing(ctx, state, W, H) {
       ? ty - size * 0.82
       : ty + subSize * 1.5 + 46 * u;
     ctx.save();
-    ctx.font = `italic 600 ${Math.round(40 * u)}px Georgia, 'Times New Roman', serif`;
+    ctx.font = `400 ${Math.round(52 * u)}px "Great Vibes", cursive`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     ctx.shadowColor = 'rgba(0,0,0,0.6)';

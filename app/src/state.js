@@ -52,10 +52,10 @@ export function defaultState() {
     size: '1080x1080',
     dressing: { ...DRESSING_DEFAULT },
     panels: [
-      defaultPanel('samples/vice-portrait.jpg', ''),
+      defaultPanel('samples/vice-convertible.jpg', ''),
       defaultPanel('samples/vice-boulevard.jpg', 'OCEAN DRIVE'),
       defaultPanel('samples/vice-pier.jpg', 'NIGHT PIER'),
-      defaultPanel('samples/vice-convertible.jpg', 'GOLDEN HOUR'),
+      defaultPanel('samples/vice-portrait.jpg', 'NEON PORTRAIT'),
       defaultPanel('samples/vice-neonstreet.jpg', 'NEON RAIN'),
     ],
   };
@@ -79,8 +79,8 @@ export function isAutoSubtitle(sub) {
 /** Keeps the panel list in step when the layout changes panel count. */
 export function panelsForLayout(state, layout) {
   const want = LAYOUTS[layout].panels;
-  const photos = ['samples/vice-portrait.jpg', 'samples/vice-boulevard.jpg', 'samples/vice-pier.jpg', 'samples/vice-convertible.jpg', 'samples/vice-neonstreet.jpg', 'samples/vice-fishing.jpg', 'samples/boulevard.jpg', 'samples/pier.jpg'];
-  const notes = ['', 'OCEAN DRIVE', 'NIGHT PIER', 'GOLDEN HOUR', 'NEON RAIN', 'PIER LIFE', 'PALM ROW', 'OLD PIER'];
+  const photos = ['samples/vice-convertible.jpg', 'samples/vice-boulevard.jpg', 'samples/vice-pier.jpg', 'samples/vice-portrait.jpg', 'samples/vice-neonstreet.jpg', 'samples/vice-fishing.jpg', 'samples/boulevard.jpg', 'samples/pier.jpg'];
+  const notes = ['', 'OCEAN DRIVE', 'NIGHT PIER', 'NEON PORTRAIT', 'NEON RAIN', 'PIER LIFE', 'PALM ROW', 'OLD PIER'];
   const panels = state.panels.slice(0, want);
   while (panels.length < want) {
     panels.push(defaultPanel(photos[panels.length % photos.length], notes[panels.length % notes.length]));
