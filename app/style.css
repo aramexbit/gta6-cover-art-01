@@ -97,6 +97,24 @@ input[type="checkbox"] { accent-color: var(--pink); width: 16px; height: 16px; }
 
 /* Screenshot scenes: cover alone, fullscreen, no chrome */
 body.shot-cover .topbar, body.shot-cover .controls, body.shot-cover .stage-hint, body.shot-cover #status { display: none; }
+
+/* Screenshot scenes: editor, compact so every section fits the frame —
+   the controls column must show the whole "Selected Panel" section. */
+body.shot-editor .topbar { padding: 8px 16px; }
+body.shot-editor .brand p { display: none; }
+body.shot-editor .studio { grid-template-columns: 320px minmax(0, 1fr); gap: 14px; padding: 12px 16px 16px; }
+body.shot-editor .controls { max-height: none; overflow: visible; gap: 8px; }
+body.shot-editor .group { padding: 8px 12px; gap: 5px; }
+body.shot-editor .group h2 { font-size: 17px; }
+body.shot-editor #dropzone { display: none; }
+body.shot-editor .samples { grid-template-columns: repeat(8, 1fr); }
+body.shot-editor .samples img { aspect-ratio: 1 / 1; }
+body.shot-editor #stage { width: 560px; }
+body.shot-editor .stage-frame { padding: 10px; }
+body.shot-editor .stage-hint, body.shot-editor #status { display: none; }
+body.shot-editor .controls label { flex-direction: row; flex-wrap: wrap; align-items: baseline; column-gap: 6px; }
+body.shot-editor .thumbs { flex-wrap: nowrap; }
+body.shot-editor .thumbs canvas { width: 52px; height: 40px; }
 body.shot-cover .studio { display: block; padding: 0; }
 body.shot-cover .stage-wrap { position: static; }
 body.shot-cover .stage-frame { padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }

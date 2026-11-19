@@ -2,12 +2,15 @@
 // "Surprise me" randomiser. State is plain JSON (photos are ids into the image
 // cache), so undo is a snapshot stack and export is a pure render of state.
 
-import { GRADES, LAYOUTS } from './poster.js';
+import { GRADES, LAYOUTS, DRESSING_DEFAULT } from './poster.js';
 
 export const SAMPLES = [
   { id: 'samples/vice-portrait.jpg', label: 'Neon portrait' },
   { id: 'samples/vice-boulevard.jpg', label: 'Sunset boulevard' },
   { id: 'samples/vice-pier.jpg', label: 'Neon pier' },
+  { id: 'samples/vice-convertible.jpg', label: 'Sunset convertible' },
+  { id: 'samples/vice-neonstreet.jpg', label: 'Neon rain street' },
+  { id: 'samples/vice-fishing.jpg', label: 'Pier fishing' },
   { id: 'samples/boulevard.jpg', label: 'Boulevard (kit)' },
   { id: 'samples/pier.jpg', label: 'Pier (kit)' },
 ];
@@ -35,11 +38,11 @@ function defaultPanel(photo, note) {
 /** The poster's starting state: a finished cover on first open, never empty. */
 export function defaultState() {
   return {
-    layout: 'hero2',
+    layout: 'grid5',
     grade: 'sunset',
     fx: { duotone: false, halftone: true, grain: true, vignette: true },
     title: 'NEON BOULEVARD',
-    subtitle: 'A sunset story in three panels',
+    subtitle: subtitleForPanels(5),
     font: 'Bebas Neue',
     titleSize: 118,
     titleColor: '#ffffff',
@@ -47,19 +50,37 @@ export function defaultState() {
     spacing: 4,
     captionPos: 'bottom',
     size: '1080x1080',
+    dressing: { ...DRESSING_DEFAULT },
     panels: [
       defaultPanel('samples/vice-portrait.jpg', ''),
       defaultPanel('samples/vice-boulevard.jpg', 'OCEAN DRIVE'),
       defaultPanel('samples/vice-pier.jpg', 'NIGHT PIER'),
+      defaultPanel('samples/vice-convertible.jpg', 'GOLDEN HOUR'),
+      defaultPanel('samples/vice-neonstreet.jpg', 'NEON RAIN'),
     ],
   };
+}
+
+/** Panel-count word for the automatic subtitle: 3 -> 'three', 4 -> 'four', ... */
+export function panelCountWord(n) {
+  return { 3: 'three', 4: 'four', 5: 'five' }[n] || String(n);
+}
+
+/** The automatic subtitle for a given panel count. */
+export function subtitleForPanels(n) {
+  return `A sunset story in ${panelCountWord(n)} panels`;
+}
+
+/** True when the subtitle is still the automatic one (safe to regenerate). */
+export function isAutoSubtitle(sub) {
+  return /^a sunset story in (three|four|five|\d+) panels$/i.test((sub || '').trim());
 }
 
 /** Keeps the panel list in step when the layout changes panel count. */
 export function panelsForLayout(state, layout) {
   const want = LAYOUTS[layout].panels;
-  const photos = ['samples/vice-portrait.jpg', 'samples/vice-boulevard.jpg', 'samples/vice-pier.jpg', 'samples/boulevard.jpg'];
-  const notes = ['', 'OCEAN DRIVE', 'NIGHT PIER', 'PALM ROW'];
+  const photos = ['samples/vice-portrait.jpg', 'samples/vice-boulevard.jpg', 'samples/vice-pier.jpg', 'samples/vice-convertible.jpg', 'samples/vice-neonstreet.jpg', 'samples/vice-fishing.jpg', 'samples/boulevard.jpg', 'samples/pier.jpg'];
+  const notes = ['', 'OCEAN DRIVE', 'NIGHT PIER', 'GOLDEN HOUR', 'NEON RAIN', 'PIER LIFE', 'PALM ROW', 'OLD PIER'];
   const panels = state.panels.slice(0, want);
   while (panels.length < want) {
     panels.push(defaultPanel(photos[panels.length % photos.length], notes[panels.length % notes.length]));
@@ -120,5 +141,9 @@ export function surpriseState(state) {
   const heroPhoto = pick(rnd, SAMPLES.map((s) => s.id));
   next.panels[0].photo = heroPhoto;
   next.panels[0].zoom = 1.1 + rnd() * 0.5;
+  // Keep the dressing (badge, script, ribbon, sticker, skyline) on: it is
+  // part of the cover look now. Regenerate the subtitle if it was automatic.
+  if (!next.dressing) next.dressing = { ...DRESSING_DEFAULT };
+  if (isAutoSubtitle(next.subtitle)) next.subtitle = subtitleForPanels(LAYOUTS[next.layout].panels);
   return next;
 }

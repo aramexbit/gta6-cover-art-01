@@ -16,6 +16,18 @@ export const LAYOUTS = {
   hero3: { name: 'Hero + 3 strip', panels: 4 },
   grid: { name: 'Grid 2 x 2', panels: 4 },
   full: { name: 'Full bleed + strip', panels: 3 },
+  grid5: { name: 'Neon Grid 5', panels: 5 },
+};
+
+/** Default cover dressing (rating, script, ribbon, sticker, location, skyline). */
+export const DRESSING_DEFAULT = {
+  on: true,
+  rating: 'HEAT 4.5',
+  script: 'neon harbor nights',
+  ribbon: 'SAME TROUBLE',
+  sticker: 'EST. 2026',
+  location: 'SOLMAR BAY',
+  skyline: true,
 };
 
 /** Panel rectangles for a layout, as fractions of the poster (x, y, w, h). */
@@ -23,6 +35,21 @@ export function layoutRects(layout, W, H) {
   const g = Math.round(Math.min(W, H) * 0.014); // gutter
   const f = (x, y, w, h) => ({ x: x * W, y: y * H, w: w * W, h: h * H });
   switch (layout) {
+    case 'grid5': {
+      // Big hero on the left (~60% wide, full height) + 4 small panels right, 2x2.
+      const heroW = 0.60;
+      const rx = heroW + g / W;
+      const rw = 1 - heroW - g / W;
+      const cw = (rw - g / W) / 2;
+      const ch = (1 - g / H) / 2;
+      return [
+        f(0, 0, heroW, 1),
+        f(rx, 0, cw, ch),
+        f(rx + cw + g / W, 0, cw, ch),
+        f(rx, ch + g / H, cw, ch),
+        f(rx + cw + g / W, ch + g / H, cw, ch),
+      ];
+    }
     case 'hero3': {
       const stripH = 0.3;
       const sw = (1 - 4 * (g / W)) / 3;
@@ -167,20 +194,27 @@ function posterEffects(ctx, W, H, fx) {
   }
 }
 
+/** Shared caption geometry: title size, baseline, subtitle size and padding. */
+export function captionMetrics(state, W, H) {
+  const base = Math.min(W, H);
+  const size = (state.titleSize || 118) * (base / 1080);
+  const pos = state.captionPos || 'bottom';
+  const pad = base * 0.045;
+  const sub = (state.subtitle || '').trim();
+  let ty;
+  if (pos === 'top') ty = pad + size;
+  else if (pos === 'overlay') ty = H * 0.52;
+  else ty = H - pad - (sub ? size * 0.42 : 0);
+  return { base, size, pos, pad, ty, subSize: Math.max(16, size * 0.24), sub };
+}
+
 /** Bold condensed title + subtitle, with outline, shadow and letter spacing. */
 export function drawCaption(ctx, state, W, H) {
   const title = (state.title || '').trim().toUpperCase();
   const sub = (state.subtitle || '').trim();
   if (!title && !sub) return;
   const font = state.font || 'Bebas Neue';
-  const base = Math.min(W, H);
-  const size = (state.titleSize || 118) * (base / 1080);
-  const pos = state.captionPos || 'bottom';
-  const pad = base * 0.045;
-  let ty;
-  if (pos === 'top') ty = pad + size;
-  else if (pos === 'overlay') ty = H * 0.52;
-  else ty = H - pad - (sub ? size * 0.42 : 0);
+  const { base, size, pos, pad, ty } = captionMetrics(state, W, H);
 
   // A soft band behind the caption so lettering reads on any photo.
   if (pos !== 'overlay') {
@@ -230,8 +264,11 @@ export function drawCaption(ctx, state, W, H) {
   ctx.restore();
 }
 
-/** The small label printed on a side panel, if the panel has a note. */
-function panelNote(ctx, text, rect) {
+/** The small label printed on a side panel, if the panel has a note.
+ *  `bottom` pins it to the panel's bottom-left instead of its top-left —
+ *  used for the top-right corner panel, whose top-left sits under the
+ *  diagonal dressing ribbon. */
+function panelNote(ctx, text, rect, bottom) {
   if (!text) return;
   const { x, y, w, h } = rect;
   const size = Math.max(13, Math.min(w, h) * 0.11);
@@ -240,12 +277,225 @@ function panelNote(ctx, text, rect) {
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   const tw = ctx.measureText(text.toUpperCase()).width;
-  // Top-left, so the note never collides with the bottom caption band.
+  // Top-left, so the note never collides with the bottom caption band —
+  // unless it is the corner panel under the ribbon (see above).
+  const ny = bottom ? y + h - size * 1.9 - Math.max(6, size * 0.4) : y;
   ctx.fillStyle = 'rgba(10,2,20,0.72)';
-  ctx.fillRect(x, y, tw + size * 1.1, size * 1.9);
+  ctx.fillRect(x, ny, tw + size * 1.1, size * 1.9);
   ctx.fillStyle = '#ffe08a';
-  ctx.fillText(text.toUpperCase(), x + size * 0.55, y + size * 1.35);
+  ctx.fillText(text.toUpperCase(), x + size * 0.55, ny + size * 1.35);
   ctx.restore();
+}
+
+/** Rounded-rect path helper (works in every canvas). */
+function rr(ctx, x, y, w, h, r) {
+  const rad = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rad, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rad);
+  ctx.arcTo(x + w, y + h, x, y + h, rad);
+  ctx.arcTo(x, y + h, x, y, rad);
+  ctx.arcTo(x, y, x + w, y, rad);
+  ctx.closePath();
+}
+
+/** One 5-point star path, centred at (cx, cy) with outer radius r. */
+function starPath(ctx, cx, cy, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const rad = i % 2 === 0 ? r : r * 0.45;
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const px = cx + Math.cos(a) * rad;
+    const py = cy + Math.sin(a) * rad;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+/**
+ * Cover dressing: star-rating badge, italic script line, diagonal ribbon,
+ * round sticker, location label and a skyline silhouette strip. Drawn last,
+ * on top of the caption, and positioned to stay clear of the centred title
+ * and subtitle. All of it exports with the PNG.
+ */
+export function drawDressing(ctx, state, W, H) {
+  const d = { ...DRESSING_DEFAULT, ...(state.dressing || {}) };
+  if (!d.on) return;
+  const { base, size, pos, pad, ty, subSize } = captionMetrics(state, W, H);
+  const u = base / 1080; // scale unit (1 at 1080px)
+
+  // --- skyline silhouette strip along the very bottom edge ---
+  if (d.skyline) {
+    const sh = Math.max(22, H * 0.032);
+    const rnd = seeded(77);
+    ctx.save();
+    let x = 0;
+    while (x < W) {
+      const bw = (0.03 + rnd() * 0.075) * W;
+      const bh = sh * (0.45 + rnd() * 0.55);
+      ctx.fillStyle = '#0b0216';
+      ctx.fillRect(x, H - bh, bw, bh);
+      if (rnd() > 0.4) { // one lit window per building, sometimes
+        ctx.fillStyle = 'rgba(255,201,61,0.9)';
+        ctx.fillRect(x + bw * 0.3, H - bh + sh * 0.14, Math.max(2, 3 * u), Math.max(2, 4 * u));
+      }
+      x += bw + 2;
+    }
+    ctx.restore();
+  }
+
+  // --- star-rating badge, top-left ---
+  const ratingText = (d.rating || '').trim().toUpperCase();
+  if (ratingText) {
+    const m = ratingText.match(/(\d+(?:[.,]\d+)?)\s*$/);
+    const val = m ? Math.max(0, Math.min(5, parseFloat(m[1].replace(',', '.')))) : 4.5;
+    const starR = 11 * u;
+    const gap = 5 * u;
+    const starsW = 5 * starR * 2 + 4 * gap;
+    ctx.save();
+    ctx.font = `400 ${27 * u}px "Bebas Neue", sans-serif`;
+    const tw = ctx.measureText(ratingText).width;
+    const bh = 46 * u;
+    const bw = pad + starsW + 16 * u + tw + pad;
+    const bx = pad;
+    const by = pad;
+    ctx.fillStyle = 'rgba(10,2,20,0.78)';
+    rr(ctx, bx, by, bw, bh, bh / 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,201,61,0.9)';
+    ctx.lineWidth = Math.max(1.5, 2 * u);
+    ctx.stroke();
+    const cy = by + bh / 2;
+    for (let i = 0; i < 5; i++) {
+      const cx = bx + pad + starR + i * (starR * 2 + gap);
+      starPath(ctx, cx, cy, starR);
+      ctx.fillStyle = 'rgba(255,201,61,0.28)';
+      ctx.fill();
+      if (val >= i + 1) {
+        ctx.fillStyle = '#ffc93d';
+        ctx.fill();
+      } else if (val > i) { // half star: fill only the left part
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(cx - starR, cy - starR, starR, starR * 2);
+        ctx.clip();
+        starPath(ctx, cx, cy, starR);
+        ctx.fillStyle = '#ffc93d';
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(ratingText, bx + pad + starsW + 16 * u, cy + u);
+    ctx.restore();
+  }
+
+  // --- location label, under the rating badge ---
+  const loc = (d.location || '').trim().toUpperCase();
+  if (loc) {
+    ctx.save();
+    ctx.font = `600 ${17 * u}px "Oswald", sans-serif`;
+    if ('letterSpacing' in ctx) ctx.letterSpacing = `${(2 * u).toFixed(1)}px`;
+    const tw = ctx.measureText(loc).width;
+    const lh = 30 * u;
+    const ly = pad + 46 * u + 8 * u;
+    ctx.fillStyle = 'rgba(10,2,20,0.65)';
+    rr(ctx, pad, ly, tw + 24 * u, lh, lh / 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffe08a';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(loc, pad + 12 * u, ly + lh / 2 + u);
+    ctx.restore();
+  }
+
+  // --- italic script line, just above the title (or below it when on top) ---
+  const script = (d.script || '').trim();
+  if (script) {
+    const sy = pos === 'bottom'
+      ? ty - size * 0.82
+      : ty + subSize * 1.5 + 46 * u;
+    ctx.save();
+    ctx.font = `italic 600 ${Math.round(40 * u)}px Georgia, 'Times New Roman', serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+    ctx.shadowBlur = 10 * u;
+    ctx.shadowOffsetY = 3 * u;
+    ctx.fillStyle = '#ffd9ec';
+    ctx.fillText(script, W / 2, sy);
+    ctx.restore();
+  }
+
+  // --- diagonal ribbon across the top-right corner ---
+  // Centred on the corner diagonal, close to the corner. The top-right
+  // panel's note drops to its bottom-left (see panelNote), so the ribbon
+  // never covers a label.
+  const ribbon = (d.ribbon || '').trim().toUpperCase();
+  if (ribbon) {
+    ctx.save();
+    ctx.translate(W - 72 * u, 72 * u);
+    ctx.rotate(Math.PI / 4);
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 12 * u;
+    ctx.shadowOffsetY = 4 * u;
+    ctx.fillStyle = '#ffc93d';
+    ctx.fillRect(-150 * u, -25 * u, 300 * u, 50 * u);
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.fillStyle = 'rgba(20,6,31,0.55)';
+    ctx.fillRect(-150 * u, -25 * u, 300 * u, 4 * u);
+    ctx.fillRect(-150 * u, 21 * u, 300 * u, 4 * u);
+    ctx.font = `400 ${27 * u}px "Bebas Neue", sans-serif`;
+    if ('letterSpacing' in ctx) ctx.letterSpacing = `${(2 * u).toFixed(1)}px`;
+    ctx.fillStyle = '#1a0b00';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(ribbon, 0, 2 * u);
+    ctx.restore();
+  }
+
+  // --- round sticker, bottom-right, clear of the centred caption ---
+  const sticker = (d.sticker || '').trim().toUpperCase();
+  if (sticker) {
+    const cx = W - 84 * u;
+    const cy = H - 132 * u;
+    const r = 54 * u;
+    const lines = sticker.split(/\s+/).slice(0, 2);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(-0.14);
+    ctx.fillStyle = '#ff2e88';
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = Math.max(2, 4 * u);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, r - 9 * u, 0, Math.PI * 2);
+    ctx.setLineDash([6 * u, 5 * u]);
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+    ctx.lineWidth = Math.max(1.5, 2 * u);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (lines.length === 1) {
+      ctx.font = `400 ${30 * u}px "Bebas Neue", sans-serif`;
+      ctx.fillText(lines[0], 0, u);
+    } else {
+      ctx.font = `400 ${22 * u}px "Bebas Neue", sans-serif`;
+      ctx.fillText(lines[0], 0, -13 * u);
+      ctx.font = `400 ${32 * u}px "Bebas Neue", sans-serif`;
+      ctx.fillText(lines[1], 0, 15 * u);
+    }
+    ctx.restore();
+  }
 }
 
 /**
@@ -274,10 +524,15 @@ export function drawPoster(ctx, state, images, W, H) {
     ctx.lineWidth = Math.max(2, W * 0.004);
     ctx.strokeRect(rect.x + ctx.lineWidth / 2, rect.y + ctx.lineWidth / 2, rect.w - ctx.lineWidth, rect.h - ctx.lineWidth);
     ctx.restore();
-    panelNote(ctx, panel.note, rect);
+    // The top-right corner panel's note drops to its bottom-left when the
+    // dressing ribbon is on, so the ribbon never covers the label.
+    const dressingOn = (state.dressing || {}).on !== false;
+    const underRibbon = dressingOn && rect.x + rect.w >= W - 1 && rect.y <= 1;
+    panelNote(ctx, panel.note, rect, underRibbon);
   });
   posterEffects(ctx, W, H, fx);
   drawCaption(ctx, state, W, H);
+  drawDressing(ctx, state, W, H);
 }
 
 /** Renders the poster at an exact export size and returns the canvas. */

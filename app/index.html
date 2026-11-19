@@ -41,7 +41,7 @@
     <section class="group">
       <h2>2 &middot; Layout</h2>
       <div id="layouts" class="seg" role="radiogroup" aria-label="Poster layout"></div>
-      <p class="hint">Click a panel thumbnail below the poster to edit that panel.</p>
+      <p class="hint">Click a panel thumbnail below the poster to edit that panel. Keys 1&ndash;5 switch layout.</p>
       <div id="panelThumbs" class="thumbs" aria-label="Panels"></div>
     </section>
 
@@ -122,6 +122,20 @@
         <button type="button" data-size="1920x1080" aria-checked="false">1920 &times; 1080</button>
       </div>
       <p class="hint">PNG, exact post size, rendered on your machine in under a second.</p>
+    </section>
+
+    <section class="group">
+      <h2>7 &middot; Dressing</h2>
+      <div class="checks">
+        <label><input id="dressOn" type="checkbox" checked> Dressing on</label>
+        <label><input id="dressSkyline" type="checkbox" checked> Skyline strip</label>
+      </div>
+      <label>Rating badge <input id="dressRating" type="text" maxlength="16" value="HEAT 4.5"></label>
+      <label>Script line <input id="dressScript" type="text" maxlength="24" value="neon harbor nights"></label>
+      <label>Diagonal ribbon <input id="dressRibbon" type="text" maxlength="16" value="SAME TROUBLE"></label>
+      <label>Sticker <input id="dressSticker" type="text" maxlength="12" value="EST. 2026"></label>
+      <label>Location <input id="dressLocation" type="text" maxlength="20" value="SOLMAR BAY"></label>
+      <p class="hint">Stars, script, ribbon, sticker, location and skyline are painted into the poster &mdash; they export with the PNG.</p>
     </section>
   </aside>
 

@@ -4,9 +4,12 @@
 // art, no library and no network request). This program hands it in: it copies
 // app/ and screenshots/ from beside this file to /output and writes
 // /output/dossier.json, the summary the judge reads, with the vendored make.fun
-// library. The app itself is a multi-panel poster composer: pick a layout, drop
-// in your own photos or the bundled samples, grade them sunset / neon / teal /
-// noir / gold, write a bold caption, and export an exact-size PNG poster.
+// library. The app itself is a multi-panel poster composer: pick one of five
+// layouts (including the Neon Grid 5: big hero left + 2x2 small panels right),
+// drop in your own photos or the bundled samples, grade them sunset / neon /
+// teal / noir / gold, dress the cover with a star-rating badge, script line,
+// diagonal ribbon, sticker, location label and skyline strip, write a bold
+// caption, and export an exact-size PNG poster.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:

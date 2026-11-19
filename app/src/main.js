@@ -2,8 +2,8 @@
 // export and the ?shot= scenes (./shots.js). No network request is ever made:
 // samples and fonts are files under app/, uploads are read locally.
 
-import { drawPoster, renderExport, GRADES, LAYOUTS, layoutRects } from './poster.js';
-import { SAMPLES, SIZES, defaultState, panelsForLayout, createHistory, surpriseState } from './state.js';
+import { drawPoster, renderExport, GRADES, LAYOUTS, layoutRects, DRESSING_DEFAULT } from './poster.js';
+import { SAMPLES, SIZES, defaultState, panelsForLayout, createHistory, surpriseState, subtitleForPanels, isAutoSubtitle } from './state.js';
 import { runShot } from './shots.js';
 
 const $ = (id) => document.getElementById(id);
@@ -129,9 +129,11 @@ function buildLayouts() {
     b.addEventListener('click', () => {
       state.layout = key;
       state.panels = panelsForLayout(state, key);
+      if (isAutoSubtitle(state.subtitle)) state.subtitle = subtitleForPanels(LAYOUTS[key].panels);
       selected = 0;
       syncLayoutButtons();
       syncPanelControls();
+      syncCaptionControls();
       commit();
     });
     wrap.appendChild(b);
@@ -210,11 +212,24 @@ function syncCaptionControls() {
   $('captionPos').value = state.captionPos;
 }
 
+function syncDressingControls() {
+  if (!state.dressing) state.dressing = { ...DRESSING_DEFAULT };
+  const d = state.dressing;
+  $('dressOn').checked = d.on !== false;
+  $('dressRating').value = d.rating || '';
+  $('dressScript').value = d.script || '';
+  $('dressRibbon').value = d.ribbon || '';
+  $('dressSticker').value = d.sticker || '';
+  $('dressLocation').value = d.location || '';
+  $('dressSkyline').checked = d.skyline !== false;
+}
+
 function syncAll() {
   syncLayoutButtons();
   syncGradeButtons();
   syncPanelControls();
   syncCaptionControls();
+  syncDressingControls();
   $('fxDuotone').checked = state.fx.duotone;
   $('fxHalftone').checked = state.fx.halftone;
   $('fxGrain').checked = state.fx.grain;
@@ -340,6 +355,24 @@ $('spacing').addEventListener('input', (e) => { state.spacing = Number(e.target.
 $('spacing').addEventListener('change', () => history.push(state));
 $('captionPos').addEventListener('change', (e) => { state.captionPos = e.target.value; commit(); });
 
+/* ---------- dressing ---------- */
+
+$('dressOn').addEventListener('change', (e) => {
+  state.dressing.on = e.target.checked;
+  commit();
+});
+$('dressSkyline').addEventListener('change', (e) => {
+  state.dressing.skyline = e.target.checked;
+  commit();
+});
+[['dressRating', 'rating'], ['dressScript', 'script'], ['dressRibbon', 'ribbon'], ['dressSticker', 'sticker'], ['dressLocation', 'location']].forEach(([id, key]) => {
+  $(id).addEventListener('input', (e) => {
+    state.dressing[key] = e.target.value;
+    redraw();
+  });
+  $(id).addEventListener('change', () => history.push(state));
+});
+
 /* ---------- sizes + export ---------- */
 
 [...$('sizes').children].forEach((b) => {
@@ -451,7 +484,7 @@ document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); $('undo').click(); }
   else if (e.key.toLowerCase() === 'e') { exportOne(sizeOf(), false); }
   else if (e.key.toLowerCase() === 's') { $('surprise').click(); }
-  else if (['1', '2', '3', '4'].includes(e.key)) {
+  else if (['1', '2', '3', '4', '5'].includes(e.key)) {
     const key = Object.keys(LAYOUTS)[Number(e.key) - 1];
     if (key) [...$('layouts').children][Number(e.key) - 1].click();
   }
