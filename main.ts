@@ -1,11 +1,12 @@
-// A working gta6-cover-art-01 entry (Node 22, standard library only): the app is this directory's app/ folder, plain
-// static files a desktop browser loads offline (app/index.html and its ES modules, no library and no network
-// request), and the program hands it in. It copies app/ and screenshots/ from beside this file to /output and writes
-// /output/dossier.json, the summary the judge reads, with the vendored make.fun library. Only the plumbing, not the
-// cover art the bounty asks for: Cover Snap, a plain one-photo square cover with a sunset tint and a bold caption,
-// exported as a 1080 x 1080 PNG. Its two sample photos (app/samples/) were made for make.fun with an image model and
-// are free to use. Build your own GTA-style cover maker in its place, put your 3 or 4 PNG or JPEG screenshots in
-// screenshots/ (the first by name is the cover) and run it.
+// Vice Poster Studio — a gta6-cover-art-01 entry (Node 22, standard library only).
+// The app is this directory's app/ folder: plain static files a desktop browser
+// loads offline (app/index.html and its ES modules, bundled OFL fonts and sample
+// art, no library and no network request). This program hands it in: it copies
+// app/ and screenshots/ from beside this file to /output and writes
+// /output/dossier.json, the summary the judge reads, with the vendored make.fun
+// library. The app itself is a multi-panel poster composer: pick a layout, drop
+// in your own photos or the bundled samples, grade them sunset / neon / teal /
+// noir / gold, write a bold caption, and export an exact-size PNG poster.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
