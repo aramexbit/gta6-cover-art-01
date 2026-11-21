@@ -39,7 +39,7 @@ distributed by the Copyright Holder(s).
 "Modified Version" refers to any derivative made by adding to, deleting,
 or substituting -- in part or in whole -- any of the components of the
 Original Version, by changing formats or by porting the Font Software to a
-new environment.
+new environment. 
 
 "Author" refers to any designer, engineer, programmer, technical
 writer or other person who contributed to the Font Software.
@@ -51,7 +51,7 @@ redistribute, and sell modified and unmodified copies of the Font
 Software, subject to the following conditions:
 
 1) Neither the Font Software nor any of its individual components,
-in the Original Version or a Modified Version, may be sold by itself.
+in Original or Modified Versions, may be sold by itself.
 
 2) Original or Modified Versions of the Font Software may be bundled,
 redistributed and/or sold with any software, provided that each copy
@@ -89,5 +89,5 @@ OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
 COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
 INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
 DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-FROM, OUT OF OR IN CONNECTION WITH THE USE OR INABILITY TO USE THE
-FONT SOFTWARE OR FROM OTHER DEALINGS IN THE FONT SOFTWARE.
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.
