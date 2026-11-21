@@ -1,41 +1,38 @@
-// Vice Poster Studio — shots.js: turns a screenshot URL query into a state.
-// The runner drives the app with ?shot=cover|editor|verify plus photo,
-// caption, layout and grade, so every screenshot is a reproducible render.
+// Vice Poster Studio — shots.js: fixed scenes for screenshots. `?shot=cover` shows the
+// exported cover alone at its post size; `?shot=editor` shows the full editor with a
+// sample photo loaded. `photo` picks the hero sample, `caption` the title, `layout` and
+// `grade` the look, `size` the export size. window.__shotReady is set once painted.
+import { drawCover } from './poster.js';
+import { EXPORT_SIZES } from './state.js';
 
-import { layoutById, gradeById, sampleById, fitPanelsToLayout, sizeById } from './state.js';
-
-// The four scenes the runner screenshots, in the order shots.json lists
-// them. The first is the cover: it is the entry's face on the board.
-export function applyShot(state, params) {
-  if (params.layout && layoutById(params.layout)) {
-    state.layout = params.layout;
-    fitPanelsToLayout(state);
+export async function runShot(shot, query, api) {
+  const { state, images, canvas } = api;
+  const photo = query.get('photo');
+  if (photo) state.panels[0].photo = photo;
+  const caption = query.get('caption');
+  if (caption) state.title = caption;
+  const layout = query.get('layout');
+  if (layout) state.layout = layout;
+  const grade = query.get('grade');
+  if (grade) state.grade = grade;
+  const sizeName = query.get('size');
+  if (sizeName) {
+    const idx = EXPORT_SIZES.findIndex((s) => `${s.w}x${s.h}` === sizeName);
+    if (idx >= 0) state.exportSize = idx;
   }
-  if (params.grade && gradeById(params.grade)) {
-    state.panels.forEach((p) => { p.grade = params.grade; });
+  if (api.syncControls) api.syncControls();
+  if (shot === 'cover') {
+    document.body.classList.add('shot-cover');
+    const size = EXPORT_SIZES[state.exportSize] ?? EXPORT_SIZES[0];
+    drawCover(canvas, state, images, size.w, size.h);
+    canvas.style.width = '100vw';
+    canvas.style.height = '100vh';
+    canvas.style.objectFit = 'contain';
+  } else {
+    document.body.classList.add('shot-editor');
+    api.redraw();
   }
-  if (params.photo && sampleById(params.photo)) {
-    state.panels[0].photo = params.photo;
-  }
-  if (params.caption) {
-    state.title = params.caption.toUpperCase();
-  }
-  if (params.size) state.exportSize = params.size;
-  if (params.dressing === 'off') state.dressing.show = false;
-  // A cover scene is the cover alone: dressing on, effects on, no editor.
-  if (params.mode === 'cover') {
-    state.dressing.show = true;
-    state.dressing.skyline = true;
-    state.effects.grain = true;
-    state.effects.vignette = true;
-  }
-  return state;
+  await document.fonts.ready;
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  window.__shotReady = true;
 }
-
-export function shotTitle(params) {
-  if (params.mode === 'cover') return `${params.caption || 'Cover'} — exported cover`;
-  if (params.mode === 'verify') return 'export check';
-  return `${params.layout || 'grid5'} — editor`;
-}
-
-export { sizeById };

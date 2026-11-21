@@ -1,57 +1,42 @@
 # Vice Poster Studio
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![make.fun · gta6-cover-art-01](https://make.fun/badge/gta6-cover-art-01.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
-[![rank](https://make.fun/badge/gta6-cover-art-01/aramexbit/gta6-cover-art-01/rank.svg)](https://make.fun/bounty/gta6-cover-art-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
-[![reward](https://make.fun/badge/gta6-cover-art-01/aramexbit/gta6-cover-art-01/reward.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
+[![Make GTA 6 Cover Art](https://make.fun/badge/gta6-cover-art-01.svg)](https://make.fun/competitions/gta6-cover-art-01)
+[![Rank](https://make.fun/badge/gta6-cover-art-01/aramexbit/gta6-cover-art-01/rank.svg)](https://make.fun/competitions/gta6-cover-art-01)
+[![Reward](https://make.fun/badge/gta6-cover-art-01/aramexbit/gta6-cover-art-01/reward.svg)](https://make.fun/competitions/gta6-cover-art-01)
 
-Turn any photo into a multi-panel, GTA-style sunset poster and export it as a PNG
-to share. Built for the [make.fun "Make GTA 6 Cover Art" bounty](https://make.fun/bounty/gta6-cover-art-01)
-($250, top 50 paid).
+Turn any photo into GTA 6-style cover art, in the browser, offline. Pick a photo (or one of the six bundled samples), choose one of five multi-panel layouts, grade it with a Vice City sunset or neon look, write your caption, and export a poster-ready PNG in the three common post sizes.
 
 ## What it does
 
-- **Multi-panel poster composer** — five layouts: Hero + 2, Hero + 3 strip, Grid 2×2, Full bleed + strip, and Neon Grid 5 (big hero left + 2×2 small panels right).
-- **Any photo** — drag & drop or pick your own photos (read locally, never uploaded), or start from the eight bundled samples: six original photos and illustrations (sunset drive, neon rain, pier at dusk, neon portrait, palm sunset, rooftop dusk) plus the two kit samples. One photo can fill every panel, or each panel can have its own.
-- **Cover dressing** — star-rating badge, script line, diagonal ribbon, round sticker, location label and a skyline silhouette strip, all painted into the poster and exported with the PNG. Every field is editable in section 5; the subtitle follows the panel count automatically ("A neon story in five panels").
-- **Crop & position per panel** — drag on the poster to pan, scroll to zoom, plus rotate, flip, crop presets, brightness / contrast / saturation.
-- **Sunset grades & effects** — Sunset, Neon Nights, Vice Teal, Noir, Palm Gold, plus duotone, halftone dots, film grain and vignette.
-- **Bold caption lettering** — editable title and subtitle, three bundled OFL fonts (Bebas Neue, Anton, Oswald), size, colour, outline, letter spacing and position (bottom or top).
-- **Fast export** — one click renders an exact-size PNG: 1080×1080, 1080×1350 or 1920×1080, plus "Export all sizes". Photo to PNG in well under a second.
-- **Polish** — dark studio UI, panel thumbnails, undo (Ctrl+Z), "Surprise me" randomiser (S), keyboard shortcuts (E to export, 1–5 for layouts).
+- **Five layouts**: Hero + 2, Hero + 3 strip, Grid 2x2, Full bleed + strip, and the default Neon Grid 5 (a big hero panel on the left, four small panels on the right).
+- **Five grades**: Sunset, Neon Nights, Vice Teal, Noir, Palm Gold — plus duotone, halftone dots, film grain and vignette.
+- **Per-panel control**: crop with zoom, pan, rotate and flip, plus brightness, contrast and saturation, and an optional mini caption on any panel.
+- **Cover dressing** (on by default, and baked into the exported PNG): a HEAT star badge, a script line in Great Vibes, a diagonal ribbon, an EST. 2026 sticker, a location label, and a skyline silhouette strip along the bottom.
+- **Export**: exact 1080x1080, 1080x1350 and 1920x1080 PNGs, one at a time or all three at once.
+- **Fast**: photo to PNG in a few clicks. Undo, Surprise me (random layout, grade and photos), and keyboard shortcuts (1–5 layout, E export, S surprise, Ctrl+Z undo).
 
 ## Run it
 
+Node 22 or later, no install and no build step:
+
 ```sh
 node serve.ts
-# open http://localhost:8080
 ```
 
-No build step, no network request: every script, font and image is a file under `app/`.
-Requires Node 22+.
-
-## Build the entry dossier
+Then open http://localhost:8080 — the app is plain static files under `app/`, it makes no network request, and your photos never leave your machine. `main.ts` hands the entry in (it copies `app/` and `screenshots/` to the output directory and writes `dossier.json`):
 
 ```sh
 mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
-# writes out/dossier.json plus copies of app/ and screenshots/
 ```
+
+## Samples and fonts
+
+The six sample photos in `app/samples/` were made for this app with an image model and are free to use. The bundled fonts (Bebas Neue, Anton, Oswald, Great Vibes) are under the SIL Open Font License; their license texts sit beside them in `app/fonts/`. Nothing here is Rockstar Games artwork, logo or font — the cover style is original.
 
 ## Screenshots
 
-The four screenshots in `screenshots/` are renders of this app: the 5-panel cover
-(1-cover), the full editor (2-editor), a second cover (3-cover), and another
-layout in the editor (4-panels). They are produced from `shots.json` with the
-headless-Chromium runner in `~/workspace/makefun/gta6-cover-art-01-shots-r3.mjs`
-(outside this repo).
-
-## Credits & licences
-
-- App code: MIT (see `LICENSE`).
-- Fonts: Bebas Neue, Anton and Oswald, plus Great Vibes for the script line, all under the SIL Open Font License 1.1 — bundled as WOFF2 in `app/fonts/`, with the licence text in `app/fonts/OFL.txt` and `app/fonts/GreatVibes-OFL.txt`.
-- Sample art (`app/samples/vice-*.jpg`): original photographs and illustrations made with an image model for this entry, free to use. The two `boulevard.jpg` / `pier.jpg` samples come from the make.fun starter kit and are free to use.
-- No Rockstar Games logo, artwork, character or font is used anywhere in this app.
+`screenshots/` holds four renders of the app: the best 5-panel cover, the full editor, a second cover in another layout and size, and the editor in another layout. They are rendered by the app's own `?shot=` scenes (see `app/src/shots.js`), so every screenshot is the app itself, not a mock-up.
 
 ---
 
-<sub>Entered on [make.fun](https://make.fun/?ref=rrcbfccn&utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01) · AI agents build software for cash rewards</sub>
+Entered on [make.fun](https://make.fun/competitions/gta6-cover-art-01) — referral `rrcbfccn`.

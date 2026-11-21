@@ -1,154 +1,111 @@
-// Vice Poster Studio — state: the catalogues (samples, layouts, grades) and the
-// default poster state. Everything the app renders comes from here; the UI in
-// main.js only edits this state, and poster.js only draws it.
+// Vice Poster Studio — state: the cover's data model, layouts, grades and sample photos.
+// Everything the poster renderer needs lives here; main.js mutates it through applyChange so
+// every edit can be undone, and shots.js builds fixed scenes from it for screenshots.
 
-export const SAMPLES = [
-  { id: 'sunset-drive', file: 'vice-sunset-drive.jpg', label: 'SUNSET DRIVE', kind: 'photo' },
-  { id: 'neon-rain', file: 'vice-neon-rain.jpg', label: 'NEON RAIN', kind: 'photo' },
-  { id: 'pier-dusk', file: 'vice-pier-dusk.jpg', label: 'PIER DUSK', kind: 'photo' },
-  { id: 'neon-portrait', file: 'vice-neon-portrait.jpg', label: 'NEON PORTRAIT', kind: 'illustration' },
-  { id: 'palm-sunset', file: 'vice-palm-sunset.jpg', label: 'PALM SUNSET', kind: 'illustration' },
-  { id: 'rooftop-dusk', file: 'vice-rooftop-dusk.jpg', label: 'ROOFTOP DUSK', kind: 'illustration' },
-  { id: 'boulevard', file: 'boulevard.jpg', label: 'BOULEVARD', kind: 'kit' },
-  { id: 'pier', file: 'pier.jpg', label: 'PIER', kind: 'kit' },
-];
+/** Sample photos bundled with the app: keys are short names, values are files under app/samples/. */
+export const SAMPLES = {
+  hero: 'samples/media-generation-hero-0-a5b7dfcb-a8fb-4c9d-b8ef-6b0d0d143b2d.jpg',
+  moto: 'samples/media-generation-moto-0-0d0643f8-5396-4273-9566-1554f862b1b6.jpg',
+  beach: 'samples/media-generation-beach-0-d966a31a-e140-4857-b581-ec87237c20b9.jpg',
+  skyline: 'samples/media-generation-skyline-0-8a177210-3510-4ddc-a9ae-52e973707a14.jpg',
+  palm: 'samples/media-generation-palm-0-82e26861-093a-4eb9-b64d-ae43534800df.jpg',
+  car: 'samples/media-generation-car-0-b03c1ed4-9e41-4878-9e1f-368e8e1faa47.jpg',
+};
 
-export function sampleById(id) {
-  return SAMPLES.find((s) => s.id === id) || null;
-}
+/** The five cover layouts, in the order the 1-5 keyboard shortcuts pick them. */
+export const LAYOUTS = ['hero2', 'hero3', 'grid', 'fullbleed', 'neon5'];
+export const LAYOUT_NAMES = {
+  hero2: 'Hero + 2',
+  hero3: 'Hero + 3 strip',
+  grid: 'Grid 2 x 2',
+  fullbleed: 'Full bleed + strip',
+  neon5: 'Neon Grid 5',
+};
 
-// Layouts: rects are fractions of the cover (x, y, w, h). The first rect is
-// always the hero. grid5 is the default: a big hero left, four small right.
-export const LAYOUTS = [
-  { id: 'hero2', name: 'Hero + 2', panels: 3 },
-  { id: 'hero3', name: 'Hero + 3 strip', panels: 4 },
-  { id: 'grid2', name: 'Grid 2x2', panels: 4 },
-  { id: 'bleed', name: 'Full bleed + strip', panels: 4 },
-  { id: 'grid5', name: 'Neon Grid 5', panels: 5 },
-];
+/** The five colour grades. */
+export const GRADES = ['sunset', 'neon', 'teal', 'noir', 'palm'];
+export const GRADE_NAMES = {
+  sunset: 'Sunset',
+  neon: 'Neon Nights',
+  teal: 'Vice Teal',
+  noir: 'Noir',
+  palm: 'Palm Gold',
+};
 
-export function layoutById(id) {
-  return LAYOUTS.find((l) => l.id === id) || LAYOUTS[4];
-}
-
-// Rects for a layout on a cover of size w x h (gutter g in pixels).
-export function layoutRects(layoutId, w, h, g = 6) {
-  const r = (x, y, rw, rh) => ({ x: x * w, y: y * h, w: rw * w, h: rh * h });
-  const gx = g / w, gy = g / h;
-  switch (layoutId) {
-    case 'hero2':
-      return [r(0, 0, 0.62 - gx, 1), r(0.62, 0, 0.38, 0.5 - gy), r(0.62, 0.5, 0.38, 0.5)];
-    case 'hero3':
-      return [
-        r(0, 0, 0.58 - gx, 1),
-        r(0.58, 0, 0.42, 0.333 - gy), r(0.58, 0.333, 0.42, 0.333 - gy), r(0.58, 0.666, 0.42, 0.334),
-      ];
-    case 'grid2':
-      return [
-        r(0, 0, 0.5 - gx, 0.5 - gy), r(0.5, 0, 0.5, 0.5 - gy),
-        r(0, 0.5, 0.5 - gx, 0.5), r(0.5, 0.5, 0.5, 0.5),
-      ];
-    case 'bleed':
-      return [
-        r(0, 0, 1, 0.76 - gy),
-        r(0, 0.76, 0.333 - gx, 0.24), r(0.333, 0.76, 0.333 - gx, 0.24), r(0.666, 0.76, 0.334, 0.24),
-      ];
-    case 'grid5':
-    default:
-      return [
-        r(0, 0, 0.58 - gx, 1),
-        r(0.58, 0, 0.42, 0.5 - gy), r(0.58, 0.5, 0.42, 0.5),
-        r(0.58, 0, 0, 0), // placeholder, replaced below
-        r(0.58, 0, 0, 0),
-      ].slice(0, 1).concat([
-        r(0.58, 0, 0.21 - gx / 2, 0.5 - gy), r(0.79, 0, 0.21, 0.5 - gy),
-        r(0.58, 0.5, 0.21 - gx / 2, 0.5), r(0.79, 0.5, 0.21, 0.5),
-      ]);
-  }
-}
-
-// Grades: a tint painted over the photo plus a CSS-filter tweak. Each grade
-// is a sunset mood; Neon Nights is the default for this build.
-export const GRADES = [
-  { id: 'sunset', name: 'Sunset', tint: 'rgba(255,110,40,0.16)', filter: 'saturate(1.25) contrast(1.06)' },
-  { id: 'neon', name: 'Neon Nights', tint: 'rgba(255,45,149,0.14)', filter: 'saturate(1.35) contrast(1.10)' },
-  { id: 'teal', name: 'Vice Teal', tint: 'rgba(0,200,190,0.13)', filter: 'saturate(1.20) contrast(1.05)' },
-  { id: 'noir', name: 'Noir', tint: 'rgba(10,10,30,0.20)', filter: 'saturate(0.55) contrast(1.14)' },
-  { id: 'gold', name: 'Palm Gold', tint: 'rgba(255,190,40,0.15)', filter: 'saturate(1.30) contrast(1.04)' },
-];
-
-export function gradeById(id) {
-  return GRADES.find((g) => g.id === id) || GRADES[1];
-}
-
+/** The three post sizes the app exports, exactly. */
 export const EXPORT_SIZES = [
-  { id: '1080x1080', w: 1080, h: 1080, label: '1080 x 1080' },
-  { id: '1080x1350', w: 1080, h: 1350, label: '1080 x 1350' },
-  { id: '1920x1080', w: 1920, h: 1080, label: '1920 x 1080' },
+  { w: 1080, h: 1080, label: '1080 x 1080' },
+  { w: 1080, h: 1350, label: '1080 x 1350' },
+  { w: 1920, h: 1080, label: '1920 x 1080' },
 ];
 
-export function sizeById(id) {
-  return EXPORT_SIZES.find((s) => s.id === id) || EXPORT_SIZES[0];
-}
+/** Script lines the Surprise button can pick from (the default is the cover's own line). */
+export const SCRIPT_LINES = [
+  'running on golden light',
+  'heat of the night',
+  'golden hour, no curfew',
+  'sunset never looked back',
+  'every light is ours tonight',
+];
 
-const WORDS = ['one', 'two', 'three', 'four', 'five', 'six'];
-
-export function subtitleFor(count) {
-  return `A neon story in ${WORDS[count - 1] || count} panels`;
-}
-
-function panel(photo, grade) {
+/** One panel's photo and adjustments. Pan is in fractions of the panel (0 centres the photo). */
+export function defaultPanel(photo, caption = '') {
   return {
-    photo, grade,
-    zoom: 1, cx: 0.5, cy: 0.5, rotate: 0, flip: false,
-    brightness: 1, contrast: 1, saturation: 1,
+    photo,
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    rotate: 0,
+    flip: false,
+    bright: 100,
+    contrast: 100,
+    sat: 100,
+    caption,
   };
 }
 
+/** The cover the app opens with: Neon Grid 5, Palm Gold grade, hero photo up front. */
 export function defaultState() {
   return {
-    layout: 'grid5',
-    exportSize: '1080x1080',
-    title: 'VICE CITY NIGHTS',
-    subtitle: subtitleFor(5),
-    captionFont: 'bebas',
-    captionSize: 1,
-    captionColor: '#ffffff',
-    captionPosition: 'bottom',
-    selected: 0,
+    layout: 'neon5',
+    grade: 'palm',
+    duotone: 'none',
+    halftone: false,
+    grain: true,
+    vignette: true,
+    dressing: true,
+    title: 'GOLDEN HOUR GETAWAY',
+    script: 'running on golden light',
+    location: 'LEONIDA',
+    ribbon: 'NO TURNING BACK',
+    heat: 4.5,
     panels: [
-      panel('sunset-drive', 'neon'),
-      panel('neon-rain', 'neon'),
-      panel('neon-portrait', 'sunset'),
-      panel('pier-dusk', 'teal'),
-      panel('palm-sunset', 'gold'),
+      defaultPanel('hero'),
+      defaultPanel('moto', 'NIGHT RIDE'),
+      defaultPanel('beach'),
+      defaultPanel('skyline', 'LEONIDA'),
+      defaultPanel('palm'),
     ],
-    dressing: {
-      show: true, skyline: true,
-      ribbon: 'NO WAY OUT',
-      script: 'chasing the last light',
-      location: 'VICE CITY',
-      rating: 4.5,
-      sticker: 'EST. 2026',
-    },
-    effects: { grain: true, vignette: true, duotone: false, halftone: false },
+    selected: 0,
+    exportSize: 0,
   };
 }
 
-// Keep panels in step with the layout's panel count when the layout changes.
-export function fitPanelsToLayout(state) {
-  const n = layoutById(state.layout).panels;
-  const pool = ['sunset-drive', 'neon-rain', 'neon-portrait', 'pier-dusk', 'palm-sunset', 'boulevard', 'pier', 'rooftop-dusk'];
-  const grades = ['neon', 'sunset', 'teal', 'gold', 'neon'];
-  while (state.panels.length < n) {
-    const i = state.panels.length;
-    state.panels.push(panel(pool[i % pool.length], grades[i % grades.length]));
-  }
-  state.panels.length = n;
-  state.subtitle = subtitleFor(n);
-  if (state.selected >= n) state.selected = 0;
-}
-
+/** A deep copy of a state, for the undo stack. */
 export function cloneState(state) {
   return JSON.parse(JSON.stringify(state));
+}
+
+/** Which panel slots a layout shows, in draw order (slot 0 is the hero). */
+export function panelsForLayout(layout) {
+  if (layout === 'hero2') return [0, 1, 2];
+  if (layout === 'hero3') return [0, 1, 2, 3];
+  if (layout === 'grid') return [0, 1, 2, 3];
+  if (layout === 'fullbleed') return [0, 1, 2, 3];
+  return [0, 1, 2, 3, 4];
+}
+
+/** The sample keys in a stable order, for the photo picker and Surprise. */
+export function sampleKeys() {
+  return Object.keys(SAMPLES);
 }

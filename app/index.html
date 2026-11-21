@@ -1,144 +1,82 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vice Poster Studio — GTA-style cover art maker</title>
-<link rel="icon" href="data:,">
-<link rel="stylesheet" href="style.css">
+<title>Vice Poster Studio — GTA 6-style cover maker</title>
+<link rel="stylesheet" href="./style.css">
 </head>
 <body>
-<header class="top">
-  <div class="brand"><span class="vice">VICE</span> POSTER STUDIO</div>
-  <div class="tagline">Photo + caption &rarr; GTA-style poster cover. Offline, nothing leaves your machine.</div>
-  <div class="keys"><b>1&ndash;5</b> layout &nbsp;<b>E</b> export &nbsp;<b>S</b> surprise &nbsp;<b>Ctrl+Z</b> undo</div>
+<header class="topbar">
+  <div>
+    <h1>VICE POSTER STUDIO</h1>
+    <p>Turn any photo into GTA 6-style cover art. Offline, in your browser.</p>
+  </div>
+  <div class="top-actions">
+    <button id="undoBtn" type="button">Undo</button>
+    <button id="surpriseBtn" type="button">Surprise me</button>
+  </div>
 </header>
-
-<main class="workspace">
-  <section class="preview-col">
-    <div class="preview-wrap">
-      <canvas id="preview" width="960" height="960"></canvas>
+<main class="app">
+  <section class="preview">
+    <canvas id="cover" width="1080" height="1080" aria-label="The cover preview"></canvas>
+    <noscript><p>This cover maker needs JavaScript to draw the cover.</p></noscript>
+    <div class="exportbar">
+      <label>Export size <select id="exportSize"></select></label>
+      <button id="exportBtn" type="button">Export PNG</button>
+      <button id="exportAllBtn" type="button">Export all sizes</button>
     </div>
-    <div class="preview-bar">
-      <span id="previewLabel">Preview &mdash; 1080x1080</span>
-      <span class="spacer"></span>
-      <button id="undoBtn" type="button" class="btn">Undo</button>
-      <button id="surpriseBtn" type="button" class="btn gold">Surprise me</button>
-    </div>
-    <div id="thumbs" class="thumbs" aria-label="Panels"></div>
+    <p id="status" role="status"></p>
+    <p class="hint">Shortcuts: 1–5 layout · E export · S surprise · Ctrl+Z undo. Pick a sample or upload your own photo.</p>
   </section>
-
   <aside class="controls">
-    <section class="card">
-      <h2><span class="num">1</span> LAYOUT</h2>
-      <div id="layoutBtns" class="pills"></div>
+    <section class="panel">
+      <h2>Photo</h2>
+      <div id="sampleRow" class="samples"></div>
+      <label class="upload">Upload your photo <input id="upload" type="file" accept="image/*"></label>
     </section>
-
-    <section class="card">
-      <h2><span class="num">2</span> PHOTOS</h2>
-      <p class="hint">Pick a sample for the selected panel, or bring your own photo.</p>
-      <div id="photoGrid" class="photos"></div>
-      <button id="uploadBtn" type="button" class="btn wide">Upload a photo</button>
-      <input id="uploadInput" type="file" accept="image/*" hidden>
-      <p class="hint">Or drag a photo onto the cover. Photos are read locally, never uploaded.</p>
+    <section class="panel">
+      <h2>Layout</h2>
+      <div id="layoutRow" class="chips"></div>
     </section>
-
-    <section class="card">
-      <h2><span class="num">3</span> SELECTED PANEL</h2>
-      <p class="hint" id="selectedLabel">Selected panel 1 of 5</p>
-      <label>Photo
-        <select id="panelPhoto"></select>
-      </label>
-      <label>Grade
-        <select id="panelGrade"></select>
-      </label>
-      <label>Zoom <span class="val" id="zoomVal"></span>
-        <input id="panelZoom" type="range" min="1" max="2.5" step="0.01" value="1">
-      </label>
-      <label>Rotate
-        <input id="panelRotate" type="range" min="-30" max="30" step="1" value="0">
-      </label>
-      <label>Brightness
-        <input id="panelBright" type="range" min="0.5" max="1.6" step="0.01" value="1">
-      </label>
-      <label>Contrast
-        <input id="panelContrast" type="range" min="0.5" max="1.6" step="0.01" value="1">
-      </label>
-      <label>Saturation
-        <input id="panelSat" type="range" min="0" max="2" step="0.01" value="1">
-      </label>
-      <button id="panelFlip" type="button" class="btn">Flip horizontal</button>
-    </section>
-
-    <section class="card">
-      <h2><span class="num">4</span> CAPTION</h2>
-      <label>Title
-        <input id="capTitle" type="text" value="VICE CITY NIGHTS" maxlength="28">
-      </label>
-      <label>Lettering
-        <select id="capFont">
-          <option value="bebas">Bebas Neue</option>
-          <option value="anton">Anton</option>
-          <option value="oswald">Oswald</option>
+    <section class="panel">
+      <h2>Grade</h2>
+      <div id="gradeRow" class="chips"></div>
+      <label>Duotone
+        <select id="duotone">
+          <option value="none">None</option>
+          <option value="sunset">Sunset</option>
+          <option value="teal">Vice Teal</option>
+          <option value="magenta">Magenta</option>
         </select>
       </label>
-      <label>Size
-        <input id="capSize" type="range" min="0.7" max="1.4" step="0.01" value="1">
-      </label>
-      <label>Colour
-        <input id="capColor" type="color" value="#ffffff">
-      </label>
-      <label>Position
-        <select id="capPosition">
-          <option value="bottom">Bottom</option>
-          <option value="top">Top</option>
-        </select>
-      </label>
+      <label><input id="halftone" type="checkbox"> Halftone dots</label>
+      <label><input id="grain" type="checkbox" checked> Film grain</label>
+      <label><input id="vignette" type="checkbox" checked> Vignette</label>
+      <label><input id="dressing" type="checkbox" checked> Cover dressing</label>
     </section>
-
-    <section class="card">
-      <h2><span class="num">5</span> COVER DRESSING</h2>
-      <label class="check"><input id="dressShow" type="checkbox" checked> Dressing on</label>
-      <label class="check"><input id="dressSkyline" type="checkbox" checked> Skyline strip</label>
-      <label>Ribbon text
-        <input id="dressRibbon" type="text" value="NO WAY OUT" maxlength="18">
-      </label>
-      <label>Script line
-        <input id="dressScript" type="text" value="chasing the last light" maxlength="32">
-      </label>
-      <label>Location label
-        <input id="dressLocation" type="text" value="VICE CITY" maxlength="18">
-      </label>
-      <label>Star rating <span class="val" id="ratingVal">4.5</span>
-        <input id="dressRating" type="range" min="0" max="5" step="0.5" value="4.5">
-      </label>
+    <section class="panel">
+      <h2>Caption</h2>
+      <label>Title <input id="titleInput" type="text" maxlength="40" value="GOLDEN HOUR GETAWAY"></label>
+      <label>Script line <input id="scriptInput" type="text" maxlength="60" value="running on golden light"></label>
+      <label>Location <input id="locationInput" type="text" maxlength="24" value="LEONIDA"></label>
+      <label>Ribbon <input id="ribbonInput" type="text" maxlength="24" value="NO TURNING BACK"></label>
     </section>
-
-    <section class="card">
-      <h2><span class="num">6</span> EFFECTS</h2>
-      <label class="check"><input id="fxGrain" type="checkbox" checked> Film grain</label>
-      <label class="check"><input id="fxVignette" type="checkbox" checked> Vignette</label>
-      <label class="check"><input id="fxDuotone" type="checkbox"> Duotone</label>
-      <label class="check"><input id="fxHalftone" type="checkbox"> Halftone dots</label>
-    </section>
-
-    <section class="card">
-      <h2><span class="num">7</span> EXPORT</h2>
-      <label>PNG size
-        <select id="exportSize">
-          <option value="1080x1080">1080 x 1080</option>
-          <option value="1080x1350">1080 x 1350</option>
-          <option value="1920x1080">1920 x 1080</option>
-        </select>
-      </label>
-      <button id="exportBtn" type="button" class="btn gold wide">Export PNG</button>
-      <button id="exportAllBtn" type="button" class="btn wide">Export all sizes</button>
-      <p class="hint">Photo to PNG in well under a second — the dressing is painted into the export.</p>
+    <section class="panel">
+      <h2>Selected panel</h2>
+      <label>Panel <select id="panelSelect"></select></label>
+      <label>Zoom <input id="zoom" type="range" min="1" max="2.5" step="0.05" value="1"> <span id="zoomVal">1</span></label>
+      <label>Pan X <input id="panX" type="range" min="-50" max="50" step="1" value="0"> <span id="panXVal">0</span></label>
+      <label>Pan Y <input id="panY" type="range" min="-50" max="50" step="1" value="0"> <span id="panYVal">0</span></label>
+      <label>Rotate <input id="rotate" type="range" min="-30" max="30" step="1" value="0"> <span id="rotateVal">0</span>&deg;</label>
+      <label><input id="flip" type="checkbox"> Flip horizontal</label>
+      <label>Brightness <input id="bright" type="range" min="40" max="160" step="1" value="100"> <span id="brightVal">100</span></label>
+      <label>Contrast <input id="contrast" type="range" min="40" max="160" step="1" value="100"> <span id="contrastVal">100</span></label>
+      <label>Saturation <input id="sat" type="range" min="0" max="200" step="1" value="100"> <span id="satVal">100</span></label>
+      <label>Panel caption <input id="panelCaption" type="text" maxlength="30" placeholder="Optional mini caption"></label>
     </section>
   </aside>
 </main>
-
-<div id="toast" class="toast" role="status"></div>
-<script type="module" src="src/main.js"></script>
+<script type="module" src="./src/main.js"></script>
 </body>
 </html>
